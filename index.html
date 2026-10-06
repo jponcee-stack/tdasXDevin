@@ -1688,7 +1688,6 @@ function codeHL(op){
 	if (!op) return;
 	const lines = view.querySelectorAll(`.cl[data-op="${op}"]`);
 	lines.forEach(e => e.classList.add("on"));
-	if (lines.length) lines[0].scrollIntoView({block:"center"});
 }
 
 function buildControls(){
