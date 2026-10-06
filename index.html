@@ -1,0 +1,1828 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estructuras con Nodos — Simulador Visual</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#111824; --panel2:#0e141d; --line:#233044;
+    --txt:#e6edf3; --dim:#8b98a9;
+    --primero:#4f8ef7; --ultimo:#2fbf71; --actual:#a78bfa; --aux:#f5a623; --tope:#f0608c;
+    --hl:#f5a623; --danger:#ef4444;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh}
+  header{padding:18px 22px 12px;border-bottom:1px solid var(--line)}
+  header h1{font-size:1.25rem;letter-spacing:.02em}
+  header p{color:var(--dim);font-size:.82rem;margin-top:3px}
+  .tabs{display:flex;gap:8px;padding:14px 22px 0}
+  .tab{background:var(--panel);color:var(--dim);border:1px solid var(--line);border-radius:10px 10px 0 0;
+       padding:9px 22px;font-size:.95rem;font-weight:700;cursor:pointer;border-bottom:none}
+  .tab.on{background:var(--panel2);color:var(--txt);box-shadow:inset 0 2px 0 var(--primero)}
+  .wrap{display:grid;grid-template-columns:1fr;gap:0}
+  @media(min-width:960px){.wrap{grid-template-columns:1fr 340px}}
+  .stagebox{background:var(--panel2);border:1px solid var(--line);border-top:none;border-radius:0 0 12px 12px;
+            margin:0 22px;min-height:380px;position:relative;overflow:hidden}
+  .statusbar{position:absolute;top:10px;right:12px;display:flex;gap:8px;z-index:5}
+  .statusbar .st{background:#0a0e14;border:1px solid var(--line);border-radius:8px;padding:4px 10px;
+                 font-size:.72rem;color:var(--dim);font-family:ui-monospace,monospace}
+  .statusbar .st b{color:var(--txt)}
+  #stage{position:absolute;inset:0}
+  .edge-label{position:absolute;font-size:.65rem;color:var(--dim);letter-spacing:.15em}
+
+  /* NODO */
+  .node{position:absolute;width:96px;height:54px;display:grid;grid-template-columns:1fr 30px;
+        background:#16202e;border:2px solid #33465f;border-radius:10px;
+        transition:left .55s cubic-bezier(.4,0,.2,1),top .55s cubic-bezier(.4,0,.2,1),
+                   opacity .4s,transform .4s,border-color .3s,box-shadow .3s}
+  .node .d{display:flex;align-items:center;justify-content:center;font-size:1rem;font-weight:700}
+  .node .d .dd{display:flex;flex-direction:column;align-items:center;line-height:1.1}
+  .node .d .dd small{font-size:.55rem;color:#7f8ea3;font-weight:400}
+  .node .n{display:flex;align-items:center;justify-content:center;border-left:1px dashed #33465f;
+           color:#5b7390;font-size:.95rem}
+  .node .pos{position:absolute;bottom:-20px;left:0;right:0;text-align:center;font-size:.62rem;
+             color:var(--dim);letter-spacing:.1em}
+  .node.hl{border-color:var(--aux);box-shadow:0 0 0 3px rgba(245,166,35,.35),0 0 18px rgba(245,166,35,.35)}
+  .node.hit{border-color:var(--ultimo);box-shadow:0 0 0 3px rgba(47,191,113,.4),0 0 18px rgba(47,191,113,.4)}
+  .node.enter{opacity:0;transform:translateY(-16px) scale(.85)}
+  .node.leave{opacity:0;transform:translateY(-26px) scale(.8)}
+  .node.leaveX{opacity:0;transform:translateX(-46px)}
+
+  /* ARISTA = flecha 'siguiente' */
+  .edge{position:absolute;height:2px;background:#3c5373;transition:left .55s,width .3s,opacity .3s}
+  .edge::after{content:"";position:absolute;right:-1px;top:-4px;border:5px solid transparent;
+               border-left-color:#3c5373}
+  .edge.hot{background:var(--aux);box-shadow:0 0 8px var(--aux)}
+  .edge.hot::after{border-left-color:var(--aux)}
+
+  /* DOBLE: celda anterior */
+  .node .p{display:none;align-items:center;justify-content:center;border-right:1px dashed #33465f;
+           color:#5b7390;font-size:.95rem}
+  .node.dbl{grid-template-columns:24px 1fr 24px}
+  .node.dbl .p{display:flex}
+  /* arista doble: flechas en los dos extremos */
+  .edge.dbl::before{content:"";position:absolute;left:-1px;top:-4px;border:5px solid transparent;
+                    border-right-color:#3c5373}
+  .edge.hot.dbl::before{border-right-color:var(--aux)}
+  /* arco circular */
+  #arc{position:absolute;inset:0;pointer-events:none;z-index:3;overflow:visible}
+  #arc path{fill:none;stroke:#4a5b73;stroke-width:2;stroke-dasharray:7 5}
+  #arc text{fill:#5b7390;font-size:10px;letter-spacing:.12em;font-family:ui-monospace,monospace}
+
+  /* CAJA NULL */
+  .nullbox{position:absolute;width:56px;height:32px;border:1px dashed #4a5b73;border-radius:8px;
+           display:flex;align-items:center;justify-content:center;color:#4a5b73;font-size:.8rem;
+           transition:opacity .3s}
+
+  /* CHIPS de referencia */
+  .ptr{position:absolute;display:flex;flex-direction:column;align-items:center;z-index:4;
+       transform:translateX(-50%);
+       transition:left .55s cubic-bezier(.4,0,.2,1),top .55s,opacity .3s;pointer-events:none}
+  .ptr .chip{font-size:.68rem;font-weight:800;padding:2px 9px;border-radius:999px;color:#0b0f14;
+             white-space:nowrap}
+  .ptr .stem{width:2px;height:12px}
+  .ptr.down .stem{order:-1}
+  .ptr.side{transform:none;flex-direction:row}
+  .ptr.side .stem{width:12px;height:2px;order:-1}
+
+  /* SLOT (pila estática) */
+  .slot{position:absolute;width:200px;height:52px;border:2px dashed #26364c;border-radius:10px}
+
+  /* PANEL lateral */
+  aside{display:flex;flex-direction:column;gap:14px;padding:0 22px 24px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .panel h2{font-size:.8rem;letter-spacing:.12em;color:var(--dim);text-transform:uppercase;margin-bottom:10px}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  input{background:#0a0e14;border:1px solid var(--line);color:var(--txt);border-radius:8px;
+        padding:8px 10px;font-size:.9rem;width:90px}
+  input.w{width:64px}
+  button.op{background:#1b2740;border:1px solid #2e4a7a;color:#bcd3ff;border-radius:8px;
+            padding:8px 12px;font-size:.82rem;font-weight:700;cursor:pointer;transition:.15s}
+  button.op:hover{background:#233455;transform:translateY(-1px)}
+  button.op:disabled{opacity:.4;cursor:default;transform:none}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--dim)}
+  .sep{width:100%;height:1px;background:var(--line);margin:6px 0}
+  .lbl{font-size:.72rem;color:var(--dim);letter-spacing:.08em}
+
+  #log{background:#0a0e14;border:1px solid var(--line);border-radius:10px;height:190px;
+       overflow-y:auto;padding:10px 12px;font-family:ui-monospace,'Courier New',monospace;font-size:.78rem}
+  .logline{padding:3px 0;border-bottom:1px dashed #182234;color:#9fb0c3;line-height:1.45}
+  .logline b{color:var(--aux)}
+  .logline.ok b{color:var(--ultimo)}
+  .concept{font-size:.83rem;line-height:1.6;color:#aebacb}
+  .concept li{margin:6px 0 6px 18px}
+  .concept b{color:var(--txt)}
+  .rulechip{display:inline-block;background:#0a0e14;border:1px solid var(--line);border-radius:6px;
+            padding:1px 7px;font-family:ui-monospace,monospace;font-size:.75rem;color:#ffd479}
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+  .legend span{display:flex;align-items:center;gap:5px;font-size:.7rem;color:var(--dim)}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+/* VÉRTICE (grafo) */
+.vtx{position:absolute;width:70px;height:70px;border-radius:50%;background:#16202e;border:2px solid #33465f;
+     display:flex;align-items:center;justify-content:center;z-index:2;
+     transition:left .55s cubic-bezier(.4,0,.2,1),top .55s,opacity .45s,transform .4s,border-color .3s,box-shadow .3s}
+.vtx .dd{text-align:center;font-weight:800;font-size:1rem;line-height:1.1}
+.vtx .dd small{display:block;font-size:.52rem;color:#7f8ea3;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.vtx.hl{border-color:var(--aux);box-shadow:0 0 0 3px rgba(245,166,35,.35),0 0 18px rgba(245,166,35,.35)}
+.vtx.hit{border-color:var(--ultimo);box-shadow:0 0 0 3px rgba(47,191,113,.4),0 0 18px rgba(47,191,113,.4)}
+.vtx.enter{opacity:0;transform:scale(.4)}
+.vtx.visited{border-color:#37c6d0;background:#0f2b2e}
+.node{z-index:2}
+#links{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+
+/* COMPARAR */
+.cmp{position:absolute;inset:10px 14px;overflow:auto;font-size:.74rem;z-index:2}
+.cmp table{width:100%;border-collapse:collapse}
+.cmp th{text-align:left;color:var(--dim);font-size:.58rem;letter-spacing:.06em;text-transform:uppercase;
+        padding:6px 7px;border-bottom:2px solid var(--line);white-space:nowrap}
+.cmp td{padding:6px 7px;border-bottom:1px solid #1d2937;vertical-align:top}
+.cmp td:first-child{font-weight:800;color:#8fd3ff;white-space:nowrap}
+.cmp .foot{margin-top:12px;padding:10px 12px;border:1px dashed #3c5373;border-radius:10px;
+           color:var(--dim);font-size:.78rem;line-height:1.6}
+.cmp .foot b{color:var(--fg)}
+
+/* PANEL DE CÓDIGO */
+.leftcol{display:flex;flex-direction:column;min-width:0}
+.codepanel{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+           margin:12px 22px 24px;padding:12px 14px}
+.codepanel h2{font-size:.72rem;letter-spacing:.12em;color:var(--dim);text-transform:uppercase;margin-bottom:8px}
+.codepanel h2 span{color:var(--fg);text-transform:none;letter-spacing:0}
+.code{margin:0;max-height:290px;overflow:auto;background:#0a0e14;border:1px solid var(--line);
+      border-radius:10px;padding:8px 0;font-family:ui-monospace,'Courier New',monospace;
+      font-size:.68rem;line-height:1.6}
+.cl{white-space:pre;color:#8fa3bd;padding:0 12px;border-left:3px solid transparent}
+.cl.op-alta,.cl.op-baja,.cl.op-consulta,.cl.op-cursor,.cl.op-altaord{transition:background .3s,border-color .3s}
+.cl.on{background:#1a2b45;border-left-color:var(--aux);color:#e6edf3}
+.cl.cm{color:#4a5b73}
+</style>
+</head>
+<body>
+<header>
+  <h1>Estructuras con nodos — simulador visual</h1>
+  <p>De la lista al grafo: cada pestaña muestra cómo se conectan los nodos y quién los apunta. Probá las operaciones y mirá las flechas <b>primero</b>, <b>ultimo</b>, <b>raiz</b>, <b>actual</b> y <b>tope</b>.</p>
+</header>
+
+<nav class="tabs">
+  <button class="tab on" data-m="lista">LISTA</button>
+  <button class="tab" data-m="pila">PILA</button>
+  <button class="tab" data-m="cola">COLA</button>
+  <button class="tab" data-m="doble">DOBLE</button>
+  <button class="tab" data-m="circular">CIRCULAR</button>
+  <button class="tab" data-m="arbol">ÁRBOL</button>
+  <button class="tab" data-m="grafo">GRAFO</button>
+  <button class="tab" data-m="comparar">COMPARAR</button>
+</nav>
+
+<div class="wrap">
+  <div class="leftcol">
+    <section class="stagebox">
+      <div class="statusbar" id="statusbar"></div>
+      <div id="stage"></div>
+    </section>
+    <div class="codepanel">
+      <h2>Código Java — <span id="codetitle"></span></h2>
+      <pre class="code" id="codeview"></pre>
+    </div>
+  </div>
+
+  <aside>
+    <div class="panel">
+      <h2>Operaciones</h2>
+      <div id="controls"></div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="panel">
+      <h2>Paso a paso</h2>
+      <div id="log"></div>
+    </div>
+    <div class="panel">
+      <h2>Por qué existe</h2>
+      <div class="concept" id="concept"></div>
+    </div>
+  </aside>
+</div>
+
+<script>
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const RAND = [{id:4,nombre:"Shrek",puntaje:9},{id:12,nombre:"Dune",puntaje:8},{id:7,nombre:"Coco",puntaje:10},{id:2,nombre:"Nemo",puntaje:7},{id:15,nombre:"Alien",puntaje:9},{id:9,nombre:"Up",puntaje:8},{id:21,nombre:"Cars",puntaje:6},{id:5,nombre:"Jaws",puntaje:8}];
+const rnd = () => RAND[Math.floor(Math.random()*RAND.length)];
+const nm = o => (o && typeof o === "object") ? o.nombre : o;
+const peliStr = o => (o && typeof o === "object") ? `Pelicula [id = ${o.id}, nombre = ${o.nombre}, puntaje = ${o.puntaje}]` : String(o);
+function peli(){
+  return {
+    id: +document.getElementById("pid").value || 0,
+    nombre: (document.getElementById("v").value || "?").slice(0,10),
+    puntaje: +document.getElementById("pp").value || 0,
+  };
+}
+function azar(){
+  const r = rnd();
+  document.getElementById("v").value = r.nombre;
+  document.getElementById("pid").value = r.id;
+  document.getElementById("pp").value = r.puntaje;
+}
+
+let uid = 0;
+const mk = v => ({ id: ++uid, v, izq: -1, der: -1, padre: -1, vecinos: [], el: null, edgeEl: null });
+
+let layoutMap = {};
+const NW = 96, NH = 54, STEP = 140, TOP_H = 110, HOFF = 90; // horizontal
+const PW = 200, PH = 44, PSTEP = 52, PLEFT = 60;            // pila (vertical)
+const CAP = 6;
+
+const model = {
+  lista: { items: [mk({id:4,nombre:"Shrek",puntaje:9}), mk({id:12,nombre:"Dune",puntaje:8}), mk({id:7,nombre:"Coco",puntaje:10})],
+           ptr: { primero: 0, actual: null, aux: null } },
+  cola:  { items: [mk({id:2,nombre:"Nemo",puntaje:7}), mk({id:9,nombre:"Up",puntaje:8}), mk({id:21,nombre:"Cars",puntaje:6})],
+           ptr: { primero: 0, ultimo: 2 } },
+  pila:  { items: [mk({id:15,nombre:"Alien",puntaje:9}), mk({id:5,nombre:"Jaws",puntaje:8}), mk({id:7,nombre:"Coco",puntaje:10})],
+           ptr: { tope: 2 } },
+  doble: { items: [mk({id:1,nombre:"Rayo",puntaje:7}), mk({id:9,nombre:"Bambi",puntaje:6}), mk({id:14,nombre:"Rocky",puntaje:9})],
+           ptr: { primero: 0, ultimo: 2, actual: null, atras: null, aux: null } },
+  circular:{ items: [mk({id:2,nombre:"Nemo",puntaje:7}), mk({id:9,nombre:"Up",puntaje:8}), mk({id:11,nombre:"Mulan",puntaje:8})],
+           ptr: { primero: 0, ultimo: 2, actual: null, aux: null } },
+  arbol: { items: [mk({id:8,nombre:"Up",puntaje:8}), mk({id:3,nombre:"Coco",puntaje:10}), mk({id:12,nombre:"Dune",puntaje:8}),
+                   mk({id:1,nombre:"Rayo",puntaje:7}), mk({id:6,nombre:"Bambi",puntaje:6}), mk({id:14,nombre:"Rocky",puntaje:9})],
+           raiz: 0,
+           ptr: { raiz: 0, aux: null } },
+  grafo: { items: [mk({nombre:"A"}), mk({nombre:"B"}), mk({nombre:"C"}), mk({nombre:"D"}), mk({nombre:"E"})],
+           ptr: { actual: null } },
+  comparar:{ items: [], ptr: {} },
+};
+/* árbol inicial (ABB por id):     8          grafo inicial:   A
+                                  / \                        /|\\
+                                 3   12                      B-C  (triángulo B-D-C + cola D-E)
+                                / \    \                    |/
+                               1   6    14                   D-E */
+const ARB = model.arbol.items;
+ARB[0].izq = 1; ARB[0].der = 2;
+ARB[1].izq = 3; ARB[1].der = 4; ARB[1].padre = 0;
+ARB[2].der = 5;                   ARB[2].padre = 0;
+ARB[3].padre = 1; ARB[4].padre = 1; ARB[5].padre = 2;
+const GRF = model.grafo.items;
+GRF[0].vecinos = [1, 2];
+GRF[1].vecinos = [0, 3];
+GRF[2].vecinos = [0, 3];
+GRF[3].vecinos = [1, 2, 4];
+GRF[4].vecinos = [3];
+let mode = "lista", busy = false;
+
+const stage = document.getElementById("stage");
+const logEl = document.getElementById("log");
+const ptrEls = {};   // name -> {wrap,chip,stem}
+let nullEl = null, slotEls = [];
+
+const PTR_DEF = {
+  primero: { color: "var(--primero)", row: "down", label: "primero" },
+  ultimo:  { color: "var(--ultimo)",  row: "down", label: "ultimo"  },
+  tope:    { color: "var(--tope)",    row: "side", label: "tope"    },
+  actual:  { color: "var(--actual)",  row: "up",   label: "actual (cursor)" },
+  aux:     { color: "var(--aux)",     row: "up2",  label: "aux"     },
+  atras:   { color: "#ff7ab8",        row: "up2",  label: "atras (cursor)" },
+  raiz:    { color: "#37c6d0",        row: "down", label: "raiz" },
+};
+
+/* ---------- construcción DOM ---------- */
+function ensurePtr(name){
+  if (ptrEls[name]) return ptrEls[name];
+  const d = PTR_DEF[name];
+  const wrap = document.createElement("div");
+  wrap.className = "ptr " + (d.row.startsWith("up") ? "up" : d.row);
+  const chip = document.createElement("div"); chip.className = "chip";
+  chip.style.background = d.color; chip.textContent = d.label;
+  const stem = document.createElement("div"); stem.className = "stem";
+  stem.style.background = d.color;
+  wrap.append(chip, stem);
+  stage.appendChild(wrap);
+  return ptrEls[name] = { wrap, chip, stem };
+}
+function ensureNull(){
+  if (nullEl) return nullEl;
+  nullEl = document.createElement("div");
+  nullEl.className = "nullbox"; nullEl.textContent = "∅";
+  stage.appendChild(nullEl);
+  return nullEl;
+}
+function vtxEl(it){
+  if (it.el) return it.el;
+  const el = document.createElement("div");
+  el.className = "vtx enter";
+  el.innerHTML = `<div class="d"><div class="dd"><span>${nm(it.v)}</span><small>vértice</small></div></div>`;
+  stage.appendChild(el);
+  it.el = el;
+  return el;
+}
+function nodeEl(it){
+  if (it.el) return it.el;
+  const el = document.createElement("div");
+  el.className = "node enter";
+  const pv = (it.v && typeof it.v === "object") ? it.v : {nombre: it.v};
+  el.innerHTML = `<div class="p">←</div><div class="d"><div class="dd"><span>${pv.nombre}</span><small>id ${pv.id ?? "-"} · ★${pv.puntaje ?? "-"}</small></div></div><div class="n">→</div><div class="pos"></div>`;
+  el.title = peliStr(it.v);
+  stage.appendChild(el);
+  const edge = document.createElement("div"); edge.className = "edge";
+  stage.appendChild(edge);
+  it.el = el; it.edgeEl = edge;
+  return el;
+}
+
+/* ---------- geometría ---------- */
+function pos(i){ // centro del nodo i en cada modo
+  const len = model[mode].items.length;
+  if (mode === "arbol" || mode === "grafo"){
+    const q = layoutMap[i] || { x: 0, y: 0 };
+    return { x: q.x, y: q.y, w: mode === "grafo" ? 70 : NW, h: mode === "grafo" ? 70 : NH };
+  }
+  if (mode === "pila"){
+    const top = stage.clientHeight - 50 - (i + 1) * PSTEP;
+    return { x: PLEFT + PW / 2, y: top, w: PW, h: PH };
+  }
+  return { x: HOFF + i * STEP + NW / 2, y: TOP_H, w: NW, h: NH };
+}
+function nullPos(){
+  if (mode === "pila")
+    return { x: PLEFT + PW / 2, y: stage.clientHeight - 44 };
+  return { x: 45, y: TOP_H + 11 };
+}
+
+/* posiciones del árbol: x = lugar en el in-orden, y = profundidad */
+function layoutArbol(){
+  const m = model.arbol, map = {}, W = Math.max(stage.clientWidth, 640);
+  const ord = [];
+  const walk = i => { if (i < 0) return; walk(m.items[i].izq); ord.push(i); walk(m.items[i].der); };
+  walk(m.raiz);
+  ord.forEach((idx, j) => {
+    let d = 0, k = idx;
+    while (m.items[k].padre >= 0){ k = m.items[k].padre; d++; }
+    map[idx] = { x: W * (j + 1) / (ord.length + 1), y: 70 + d * 92 };
+  });
+  return map;
+}
+/* posiciones del grafo: slots fijos alrededor del centro */
+function layoutGrafo(){
+  const W = stage.clientWidth, H = stage.clientHeight;
+  const P = [[0.5,0.10],[0.84,0.30],[0.72,0.72],[0.28,0.72],[0.16,0.30],[0.5,0.44]];
+  const map = {};
+  model.grafo.items.forEach((it, i) => { const g = P[i % P.length]; map[i] = { x: W * g[0], y: H * g[1] }; });
+  return map;
+}
+
+/* ---------- render ---------- */
+function render(){
+  const m = model[mode];
+  layoutMap = (mode === "arbol") ? layoutArbol() : (mode === "grafo") ? layoutGrafo() : {};
+
+  // nodos de otros modos
+  for (const st of Object.values(model))
+    st.items.forEach(it => {
+      if (st !== m) { if (it.el){ it.el.style.display="none"; if (it.edgeEl) it.edgeEl.style.display="none"; } }
+    });
+
+  // pestaña comparativa: solo tabla, sin nodos
+  let cmp = document.getElementById("cmp");
+  if (!cmp){ cmp = document.createElement("div"); cmp.id = "cmp"; cmp.className = "cmp"; stage.appendChild(cmp); }
+  if (mode === "comparar"){
+    cmp.innerHTML = CMP_HTML; cmp.style.display = "block";
+    for (const n of Object.keys(PTR_DEF)) if (ptrEls[n]) ptrEls[n].wrap.style.opacity = 0;
+    ensureNull().style.opacity = 0;
+    const arc0 = document.getElementById("arc"); if (arc0) arc0.style.display = "none";
+    const ln0 = document.getElementById("links"); if (ln0) ln0.style.display = "none";
+    statusbar(); return;
+  }
+  cmp.style.display = "none";
+  m.items.forEach((it, i) => {
+    const el = (mode === "grafo") ? vtxEl(it) : nodeEl(it);
+    el.style.display = (mode === "grafo") ? "flex" : "grid";
+    const p = pos(i);
+    el.style.left = (p.x - p.w / 2) + "px";
+    el.style.top = p.y + "px";
+    el.style.width = p.w + "px"; el.style.height = p.h + "px";
+    if (mode !== "grafo"){
+      // celda previa / hijo izquierdo
+      const pv2 = el.querySelector(".p");
+      if (mode === "doble"){ el.classList.add("dbl"); pv2.textContent = (i === 0) ? "∅" : "←"; }
+      else if (mode === "arbol"){ el.classList.add("dbl"); pv2.textContent = (it.izq >= 0) ? "↙" : "∅"; }
+      else el.classList.remove("dbl");
+      // celda siguiente / hijo derecho
+      el.querySelector(".n").textContent =
+        (mode === "arbol") ? (it.der >= 0 ? "↘" : "∅") :
+        (mode === "circular") ? (i === m.items.length - 1 ? "↺" : "→")
+                            : (i === m.items.length - 1) ? "∅" : "→";
+      const posl = el.querySelector(".pos");
+      posl.textContent = (mode === "lista" || mode === "doble") ? "pos " + (i + 1) : "";
+    }
+    // arista horizontal
+    const e = it.edgeEl;
+    if (!e) return;
+    e.style.display = "block";
+    e.classList.toggle("dbl", mode === "doble");
+    if (mode === "pila" || mode === "arbol"){
+      e.style.display = "none";
+    } else if (i < m.items.length - 1){
+      e.style.opacity = 1;
+      e.style.left = (p.x + p.w / 2 + 2) + "px";
+      e.style.top = (p.y + NH / 2) + "px";
+      e.style.width = (STEP - NW - 4) + "px";
+    } else e.style.opacity = 0;
+  });
+  // pedir a los elementos nuevos que animen
+  requestAnimationFrame(() => m.items.forEach(it => it.el && it.el.classList.remove("enter")));
+
+  // slots de la pila
+  slotEls.forEach(s => s.remove()); slotEls = [];
+  if (mode === "pila"){
+    for (let i = 0; i < CAP; i++){
+      const s = document.createElement("div"); s.className = "slot";
+      const p = pos(i);
+      s.style.left = (p.x - PW / 2) + "px"; s.style.top = p.y + "px";
+      s.style.zIndex = 0;
+      stage.appendChild(s); slotEls.push(s);
+    }
+    if (m.items.length) slotEls.slice(0, m.items.length).forEach(s => s.style.borderColor = "#31445f");
+  }
+
+  // arco circular (ultimo -> primero)
+  let arc = document.getElementById("arc");
+  if (!arc){
+    arc = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    arc.id = "arc"; stage.appendChild(arc);
+  }
+  if (mode === "circular" && m.items.length >= 2){
+    arc.style.display = "block";
+    arc.setAttribute("viewBox", `0 0 ${stage.clientWidth} ${stage.clientHeight}`);
+    const p0 = pos(0), pL = pos(m.items.length - 1), yB = p0.y + NH;
+    arc.innerHTML = `<defs><marker id="ah" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#4a5b73"/></marker></defs>
+      <path d="M ${pL.x} ${yB} C ${pL.x + 70} ${yB + 100}, ${p0.x - 70} ${yB + 100}, ${p0.x} ${yB + 4}" marker-end="url(#ah)"/>
+      <text x="${(p0.x + pL.x) / 2 - 62}" y="${yB + 92}">vuelve a primero</text>`;
+  } else arc.style.display = "none";
+
+  // líneas del árbol / aristas del grafo
+  let links = document.getElementById("links");
+  if (!links){
+    links = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    links.id = "links"; stage.insertBefore(links, stage.firstChild);
+  }
+  if (mode === "arbol"){
+    let L = "";
+    m.items.forEach(it => { if (it.padre >= 0){
+      const a = pos(it.padre), b = pos(m.items.indexOf(it));
+      L += `<line x1="${a.x}" y1="${a.y + NH / 2}" x2="${b.x}" y2="${b.y + NH / 2}" stroke="#3c5373" stroke-width="2"/>`;
+    }});
+    links.innerHTML = L; links.style.display = "block";
+  } else if (mode === "grafo"){
+    let L = "";
+    m.items.forEach((it, i) => it.vecinos.forEach(j => { if (j > i){
+      const a = pos(i), b = pos(j);
+      L += `<line x1="${a.x}" y1="${a.y + 35}" x2="${b.x}" y2="${b.y + 35}" stroke="#3c5373" stroke-width="2"/>`;
+    }}));
+    links.innerHTML = L; links.style.display = "block";
+  } else links.style.display = "none";
+
+  // null box
+  const nb = ensureNull();
+  const np = nullPos();
+  nb.style.left = (np.x - 28) + "px"; nb.style.top = np.y + "px";
+  const anyNull = Object.values(m.ptr).some(t => t === null) || m.items.length === 0;
+  nb.style.opacity = anyNull ? 1 : 0;
+
+  // punteros
+  const nullCount = { n: 0 };
+  const taken = {};
+  for (const [name, target] of Object.entries(m.ptr)){
+    const pe = ensurePtr(name), d = PTR_DEF[name];
+    const idx = target === null ? null : target;
+    let cx, cy;
+    if (idx === null){ cx = np.x + nullCount.n * 92; cy = np.y; nullCount.n++; }
+    else { const p = pos(idx); cx = p.x; cy = p.y; }
+    const tk = d.row + "_" + Math.round(cx);
+    cx += (taken[tk] || 0) * 52; taken[tk] = (taken[tk] || 0) + 1;
+    if (d.row === "down"){ pe.wrap.style.left = cx + "px"; pe.wrap.style.top = (cy + NH + 16) + "px"; }
+    else if (d.row === "up"){ pe.wrap.style.left = cx + "px"; pe.wrap.style.top = (cy - 34) + "px"; }
+    else if (d.row === "up2"){ pe.wrap.style.left = cx + "px"; pe.wrap.style.top = (cy - 62) + "px"; }
+    else { pe.wrap.style.left = (cx + PW / 2 + 16) + "px"; pe.wrap.style.top = (cy + 14) + "px"; }
+  }
+  // ocultar punteros que no usa este modo
+  for (const n of Object.keys(PTR_DEF))
+    if (!(n in m.ptr) && ptrEls[n]) ptrEls[n].wrap.style.opacity = 0;
+  for (const n of Object.keys(m.ptr))
+    if (ptrEls[n]) ptrEls[n].wrap.style.opacity = 1;
+
+  statusbar();
+}
+
+function statusbar(){
+  const m = model[mode], bar = document.getElementById("statusbar");
+  if (mode === "comparar"){ bar.innerHTML = `<span class="st">las 7 estructuras, una al lado de la otra</span>`; return; }
+  let h = `<span class="st">cantidad → <b>${m.items.length}</b></span>`;
+  h += `<span class="st">vacia() → <b>${m.items.length === 0}</b></span>`;
+  if (mode === "pila") h += `<span class="st">llena() → <b>${m.items.length >= CAP}</b> (TAMANIO=${CAP})</span>`;
+  bar.innerHTML = h;
+}
+
+function narrate(html, ok){
+  const d = document.createElement("div");
+  d.className = "logline" + (ok ? " ok" : "");
+  d.innerHTML = html;
+  logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
+}
+function clearLog(){ logEl.innerHTML = ""; }
+function setBusy(b){
+  busy = b;
+  document.querySelectorAll("button.op").forEach(x => x.disabled = b);
+}
+function hl(i){ const it = model[mode].items[i]; if (it && it.el) it.el.classList.add("hl"); }
+function hit(i){ const it = model[mode].items[i]; if (it && it.el) it.el.classList.add("hit"); }
+function unhl(){ model[mode].items.forEach(it => it.el && it.el.classList.remove("hl","hit")); }
+function hotEdge(i){ const it = model[mode].items[i]; if (it && it.edgeEl) it.edgeEl.classList.add("hot"); }
+function unhot(){ model[mode].items.forEach(it => it.edgeEl && it.edgeEl.classList.remove("hot")); }
+
+/* ================= LISTA ================= */
+async function listaAlta(v, p){
+  const m = model.lista, n = m.items.length;
+  codeHL("alta");
+  if (p < 1 || p > n + 1) return narrate(`<b>alta(${nm(v)}, ${p})</b> ✗ viola la PRE: 0 &lt; pos ≤ cantidad+1 (${n + 1})`);
+  setBusy(true); clearLog(); unhl();
+  narrate(`<b>alta(${nm(v)}, ${p})</b> — insertar la película en la posición ${p}`);
+  await sleep(700);
+  if (p === 1){
+    narrate(`pos == 1 → el nuevo agarra la flecha <span class="rulechip">primero</span> y <span class="rulechip">primero</span> pasa a apuntarlo a él`);
+    m.items.unshift(mk(v)); m.ptr.primero = 0;
+    if (m.ptr.actual !== null) m.ptr.actual++;
+    if (m.ptr.aux !== null) m.ptr.aux++;
+    render();
+    hotEdge(0);
+    await sleep(1400); unhot();
+  } else {
+    narrate(`pos &gt; 1 → hay que <b>caminar</b>: nace <span class="rulechip">aux</span> en primero y salta flecha por flecha hasta pos ${p - 1}`);
+    for (let i = 0; i < p - 1; i++){
+      m.ptr.aux = i; hl(i); render();
+      narrate(`&nbsp;&nbsp;aux → nodo en pos ${i + 1}`);
+      await sleep(650);
+    }
+    narrate(`ya parado en pos ${p - 1}: el <b>siguiente</b> de aux se desvía al nuevo, y el nuevo apunta al que seguía. Los nodos de atrás ni se enteran — por eso insertar donde ya estás parado es O(1)`);
+    m.items.splice(p - 1, 0, mk(v)); m.ptr.aux = null;
+    unhl(); render(); hotEdge(p - 2); hotEdge(p - 1);
+    await sleep(1600); unhot();
+  }
+  narrate(`✔ cantidad pasó a ${m.items.length}. Nadie "movió" nodos: solo se reconectaron flechas.`, true);
+  m.ptr.primero = 0; render(); setBusy(false);
+}
+
+async function listaBaja(p){
+  const m = model.lista, n = m.items.length;
+  codeHL("baja");
+  if (p < 1 || p > n) return narrate(`<b>baja(${p})</b> ✗ viola la PRE: 0 &lt; pos ≤ cantidad (${n})`);
+  setBusy(true); clearLog(); unhl();
+  narrate(`<b>baja(${p})</b> — sacar el nodo de la posición ${p}`);
+  await sleep(700);
+  if (p === 1){
+    narrate(`pos == 1 → <span class="rulechip">primero = primero.siguiente</span>: la flecha de entrada salta al segundo`);
+    m.ptr.primero = 0; hl(0); render(); await sleep(800);
+  } else {
+    for (let i = 0; i < p - 1; i++){
+      m.ptr.aux = i; hl(i); render();
+      narrate(`&nbsp;&nbsp;aux → nodo en pos ${i + 1}`);
+      await sleep(650);
+    }
+    narrate(`<b>anterior.siguiente = eliminar.siguiente</b> — la flecha de aux <b>salta por encima</b> del nodo ${p}: queda desconectado`);
+    m.ptr.aux = null; hl(p - 1); render(); await sleep(1100);
+  }
+  const it = m.items[p - 1];
+  it.el.classList.add("leave"); it.edgeEl.style.opacity = 0;
+  narrate(`el nodo quedó "huérfano": nadie lo apunta → el Garbage Collector lo limpia. En nodos, <b>borrar es quedarse sin referencia</b>.`);
+  await sleep(700);
+  m.items.splice(p - 1, 1);
+  if (m.ptr.actual !== null && m.ptr.actual >= p - 1) m.ptr.actual = Math.max(0, m.ptr.actual - 1);
+  it.el.remove(); it.edgeEl.remove(); it.el = null;
+  m.ptr.primero = m.items.length ? 0 : null; unhl(); render();
+  narrate(`✔ cantidad → ${m.items.length}. Los demás nodos no se movieron un píxel lógico.`, true);
+  setBusy(false);
+}
+
+async function listaConsulta(p){
+  const m = model.lista, n = m.items.length;
+  codeHL("consulta");
+  if (p < 1 || p > n) return narrate(`<b>consulta(${p})</b> ✗ viola la PRE: 0 &lt; pos ≤ cantidad (${n})`);
+  setBusy(true); clearLog(); unhl();
+  narrate(`<b>consulta(${p})</b> — traer el dato de la posición ${p}`);
+  await sleep(600);
+  narrate(`no hay acceso directo: <span class="rulechip">aux</span> sale de primero y camina`);
+  for (let i = 0; i < p; i++){
+    m.ptr.aux = i; hl(i); render();
+    narrate(`&nbsp;&nbsp;salto ${i + 1} → pos ${i + 1}`);
+    await sleep(650);
+  }
+  hit(p - 1); m.ptr.aux = null; render();
+  narrate(`✔ devolvió <b>${peliStr(m.items[p - 1].v)}</b>. Costo: ${p} saltos → consultar es O(n). Por eso existe el cursor: para recorrer sin pagar n saltos por elemento.`, true);
+  await sleep(900); unhl(); render(); setBusy(false);
+}
+
+function listaIniciar(){
+  const m = model.lista;
+  codeHL("cursor");
+  m.ptr.actual = m.items.length ? 0 : null;
+  narrate(`<b>iniciar()</b> — el cursor <span class="rulechip">actual</span> se para sobre primero${m.items.length ? "" : " (pero la lista está vacía: actual = null)"}`);
+  unhl(); render();
+}
+
+async function listaSiguiente(){
+  const m = model.lista;
+  codeHL("cursor");
+  if (m.ptr.actual === null){
+    narrate(`<b>obtenerSiguiente()</b> ✗ PRE violada: haySiguiente() es false — el cursor ya terminó (o nunca arrancó)`);
+    return;
+  }
+  if (busy) return;
+  setBusy(true);
+  const i = m.ptr.actual;
+  hit(i); render();
+  narrate(`<b>obtenerSiguiente()</b> → devuelve <b>${peliStr(m.items[i].v)}</b> y el cursor <b>avanza solo</b>`);
+  await sleep(900);
+  m.ptr.actual = (i + 1 < m.items.length) ? i + 1 : null;
+  unhl(); render();
+  narrate(m.ptr.actual === null
+    ? `actual cayó del final → <b>haySiguiente() = false</b>. Para recorrer de nuevo: iniciar().`
+    : `actual ahora está en pos ${m.ptr.actual + 1} → haySiguiente() = true`);
+  setBusy(false);
+}
+
+async function listaAltaOrd(v){
+  const m = model.lista, n = m.items.length;
+  codeHL("altaord");
+  setBusy(true); clearLog(); unhl();
+  narrate(`<b>altaOrdenada(${nm(v)})</b> — insertar respetando el orden por <b>id</b> (lo que define compareTo)`);
+  await sleep(700);
+  narrate(`aux camina mientras el id del nodo sea <b>&lt; ${v.id}</b>: frena en el primero mayor, o al final`);
+  let p = 0;
+  while (p < n && m.items[p].v.id < v.id){
+    m.ptr.aux = p; hl(p); render();
+    narrate(`&nbsp;&nbsp;pos ${p + 1}: ${nm(m.items[p].v)} tiene id ${m.items[p].v.id} &lt; ${v.id} → sigue`);
+    await sleep(650); p++;
+  }
+  narrate(p < n
+    ? `pos ${p + 1}: id ${m.items[p].v.id} ≥ ${v.id} → el nuevo entra ACÁ (queda antes del mayor)`
+    : `aux llegó al final → el nuevo va último (es el mayor de todos)`);
+  m.items.splice(p, 0, mk(v)); m.ptr.aux = null;
+  if (m.ptr.actual !== null && m.ptr.actual >= p) m.ptr.actual++;
+  unhl(); render(); hotEdge(Math.max(0, p - 1)); hotEdge(p);
+  await sleep(1500); unhot();
+  narrate(`✔ quedó ordenada por id. OJO: la lista <b>no se ordena sola</b> — esta operación existe porque Pelicula tiene <b>compareTo</b> (por id). alta(elem,pos) sigue insertando donde VOS le digas.`, true);
+  m.ptr.primero = 0; render(); setBusy(false);
+}
+
+/* ================= PILA ================= */
+async function pilaAlta(v){
+  const m = model.pila;
+  codeHL("alta");
+  setBusy(true); clearLog(); unhl();
+  if (m.items.length >= CAP){
+    narrate(`<b>alta(${nm(v)})</b> ✗ <b>llena() = true</b>: la pila estática usa un array de TAMANIO=${CAP}. Sin nodos → sin crecer. En la versión dinámica esto no existiría.`);
+    await sleep(1600); setBusy(false); return;
+  }
+  narrate(`<b>alta(${nm(v)})</b> — "push": la película cae sobre el tope`);
+  await sleep(500);
+  m.items.push(mk(v));
+  m.ptr.tope = m.items.length - 1;
+  render();
+  narrate(`<span class="rulechip">elementos[ultimo] = elem; ultimo++</span> — el nuevo <b>tapa</b> a todos los demás: solo él es accesible`);
+  await sleep(1400);
+  narrate(`✔ nadie miró el resto de la pila. Siempre O(1), porque la única posición que existe es el tope.`, true);
+  setBusy(false);
+}
+
+async function pilaBaja(){
+  const m = model.pila;
+  codeHL("baja");
+  setBusy(true); clearLog(); unhl();
+  if (!m.items.length){
+    narrate(`<b>baja()</b> ✗ PRE violada: <b>vacia() = true</b>. Pedir el tope de una pila vacía es el clásico error → por eso la PRE existe.`);
+    await sleep(1600); setBusy(false); return;
+  }
+  const top = m.items.length - 1;
+  narrate(`<b>baja()</b> — "pop": solo puede salir el del tope`);
+  hl(top); render(); await sleep(700);
+  narrate(`<span class="rulechip">ultimo--; elementos[ultimo] = null</span> — el índice "declara" que ya no existe`);
+  const it = m.items[top];
+  it.el.classList.add("leave");
+  await sleep(650);
+  m.items.pop(); it.el.remove(); it.el = null;
+  m.ptr.tope = m.items.length ? m.items.length - 1 : null;
+  unhl(); render();
+  narrate(`✔ salió <b>${peliStr(it.v)}</b> — el último que entró. LIFO: lo más reciente es lo primero en irse (botón "deshacer", pila de llamadas, historial del browser).`, true);
+  setBusy(false);
+}
+
+async function pilaConsulta(){
+  const m = model.pila;
+  codeHL("consulta");
+  setBusy(true); clearLog(); unhl();
+  if (!m.items.length){
+    narrate(`<b>consulta()</b> ✗ PRE violada: vacia() = true`);
+    await sleep(1500); setBusy(false); return;
+  }
+  const top = m.items.length - 1;
+  narrate(`<b>consulta()</b> — "peek": mirar el tope SIN sacarlo`);
+  hit(top); render(); await sleep(1100);
+  narrate(`✔ devuelve <b>${peliStr(m.items[top].v)}</b>. Para ver el segundo tendrías que sacar el primero — esa restricción ES la pila.`, true);
+  await sleep(800); unhl(); render(); setBusy(false);
+}
+
+/* ================= COLA ================= */
+async function colaAlta(v){
+  const m = model.cola;
+  codeHL("alta");
+  setBusy(true); clearLog(); unhl();
+  narrate(`<b>alta(${nm(v)})</b> — "encolar": entra por el FINAL, detrás de <span class="rulechip">ultimo</span>`);
+  await sleep(600);
+  const vacia = !m.items.length;
+  const it = mk(v);
+  m.items.push(it); render();
+  if (vacia){
+    narrate(`la cola estaba vacía → <span class="rulechip">primero = nuevo</span> también (un solo nodo es entrada Y salida a la vez)`);
+    m.ptr.primero = 0; m.ptr.ultimo = 0;
+  } else {
+    narrate(`paso 1: <span class="rulechip">ultimo.siguiente = nuevo</span> — el viejo último estira su flecha`);
+    m.ptr.ultimo = m.items.length - 2; hotEdge(m.items.length - 2); render();
+    await sleep(900);
+    narrate(`paso 2: <span class="rulechip">ultimo = nuevo</span> — la etiqueta de "último" se pasa al recién llegado`);
+    unhot(); m.ptr.ultimo = m.items.length - 1; render();
+  }
+  await sleep(1300);
+  narrate(`✔ gracias a <span class="rulechip">ultimo</span> entrar es O(1): sin él habría que caminar toda la cadena para encontrar el final.`, true);
+  setBusy(false);
+}
+
+async function colaBaja(){
+  const m = model.cola;
+  codeHL("baja");
+  setBusy(true); clearLog(); unhl();
+  if (!m.items.length){
+    narrate(`<b>baja()</b> ✗ PRE violada: <b>vacia() = true</b> — primero ya apunta a ∅`);
+    await sleep(1600); setBusy(false); return;
+  }
+  narrate(`<b>baja()</b> — "desencolar": solo puede salir el del frente, <span class="rulechip">primero</span>`);
+  hl(0); render(); await sleep(700);
+  narrate(`<span class="rulechip">primero = primero.siguiente</span> — el frente pasa al siguiente en la fila`);
+  const it = m.items[0];
+  it.el.classList.add("leaveX"); it.edgeEl.style.opacity = 0;
+  await sleep(700);
+  m.items.shift(); it.el.remove(); it.el = null;
+  m.ptr.primero = m.items.length ? 0 : null;
+  if (!m.items.length){
+    m.ptr.ultimo = null;
+    narrate(`⚠️ quedó vacía → <span class="rulechip">ultimo = null</span> también. Si no lo reseteás, el próximo alta engancha el nuevo nodo a un fantasma. Caso borde clásico de parcial.`);
+  }
+  unhl(); render();
+  narrate(`✔ salió <b>${peliStr(it.v)}</b> — el primero que había entrado. FIFO: el orden de llegada se respeta (impresora, turnos, procesos esperando CPU).`, true);
+  setBusy(false);
+}
+
+async function colaConsulta(){
+  const m = model.cola;
+  codeHL("consulta");
+  setBusy(true); clearLog(); unhl();
+  if (!m.items.length){
+    narrate(`<b>consulta()</b> ✗ PRE violada: vacia() = true`);
+    await sleep(1500); setBusy(false); return;
+  }
+  narrate(`<b>consulta()</b> — mirar el frente SIN sacarlo`);
+  hit(0); render(); await sleep(1000);
+  narrate(`✔ devuelve <b>${peliStr(m.items[0].v)}</b> — <span class="rulechip">primero.dato</span>. El resto de la fila ni se toca.`, true);
+  await sleep(700); unhl(); render(); setBusy(false);
+}
+
+/* ================= LISTA DOBLE ================= */
+async function dobleAlta(v, p){
+  const m = model.doble, n = m.items.length;
+  codeHL("alta");
+  if (p < 1 || p > n + 1) return narrate(`<b>alta(${nm(v)}, ${p})</b> ✗ viola la PRE: 0 &lt; pos ≤ cantidad+1 (${n + 1})`);
+  setBusy(true); clearLog(); unhl();
+  narrate(`<b>alta(${nm(v)}, ${p})</b> — en la doble hay que reconectar <b>4 flechas</b>, no 2`);
+  await sleep(700);
+  const insertar = () => {
+    m.items.splice(p - 1, 0, mk(v));
+    m.ptr.primero = 0; m.ptr.ultimo = m.items.length - 1;
+    if (m.ptr.actual !== null && m.ptr.actual >= p - 1) m.ptr.actual++;
+    if (m.ptr.atras !== null && m.ptr.atras >= p - 1) m.ptr.atras++;
+  };
+  if (p === 1){
+    narrate(`pos == 1: <span class="rulechip">nuevo.siguiente = viejo primero</span>, <span class="rulechip">viejo primero.anterior = nuevo</span>, y <span class="rulechip">primero = nuevo</span>. El nuevo tiene <b>anterior = ∅</b>`);
+    insertar(); render(); hotEdge(0);
+  } else if (p === n + 1){
+    narrate(`pos == cantidad+1 (el final): <span class="rulechip">ultimo.siguiente = nuevo</span>, <span class="rulechip">nuevo.anterior = ultimo</span>, y <span class="rulechip">ultimo = nuevo</span>. El nuevo tiene <b>siguiente = ∅</b>`);
+    insertar(); render(); hotEdge(n - 1);
+  } else {
+    for (let i = 0; i < p - 1; i++){
+      m.ptr.aux = i; hl(i); render();
+      narrate(`&nbsp;&nbsp;aux → pos ${i + 1} (caminando para adelante)`);
+      await sleep(600);
+    }
+    m.ptr.aux = null; unhl();
+    narrate(`parado en pos ${p - 1} se tejen las <b>4 flechas</b>: nuevo↔anterior y nuevo↔posterior. Por eso la doble es más cómoda de recorrer pero <b>más cara de modificar</b>`);
+    insertar(); render(); hotEdge(p - 2); hotEdge(p - 1);
+  }
+  await sleep(1600); unhot();
+  narrate(`✔ cantidad → ${m.items.length}. Mirá que cada nodo ahora muestra flecha a los dos lados: anterior ← y → siguiente.`, true);
+  render(); setBusy(false);
+}
+
+async function dobleBaja(p){
+  const m = model.doble, n = m.items.length;
+  codeHL("baja");
+  if (p < 1 || p > n) return narrate(`<b>baja(${p})</b> ✗ viola la PRE: 0 &lt; pos ≤ cantidad (${n})`);
+  setBusy(true); clearLog(); unhl();
+  narrate(`<b>baja(${p})</b> — desconectar el nodo de AMBOS lados`);
+  await sleep(700);
+  if (p === 1){
+    narrate(`pos == 1: <span class="rulechip">primero = primero.siguiente</span> y el nuevo primero pone <b>anterior = ∅</b>`);
+    hl(0); render(); await sleep(800);
+  } else if (p === n){
+    narrate(`pos == cantidad (el último): <span class="rulechip">ultimo = ultimo.anterior</span> — acá la flecha <b>anterior</b> brilla: en la lista simple habría que caminar TODO para encontrar el anteúltimo`);
+    hl(n - 1); render(); await sleep(1000);
+  } else {
+    for (let i = 0; i < p - 1; i++){
+      m.ptr.aux = i; hl(i); render();
+      narrate(`&nbsp;&nbsp;aux → pos ${i + 1}`);
+      await sleep(550);
+    }
+    m.ptr.aux = null;
+    narrate(`<b>anterior.siguiente = posterior</b> y <b>posterior.anterior = anterior</b>: las dos flechas saltan por encima del nodo`);
+    hl(p - 1); render(); await sleep(1000);
+  }
+  const it = m.items[p - 1];
+  it.el.classList.add("leave"); it.edgeEl.style.opacity = 0;
+  await sleep(650);
+  m.items.splice(p - 1, 1);
+  it.el.remove(); it.edgeEl.remove(); it.el = null;
+  m.ptr.primero = m.items.length ? 0 : null;
+  m.ptr.ultimo = m.items.length ? m.items.length - 1 : null;
+  if (m.ptr.actual !== null && m.ptr.actual >= p - 1) m.ptr.actual = Math.max(0, m.ptr.actual - 1);
+  if (m.ptr.atras !== null && m.ptr.atras >= p - 1) m.ptr.atras = Math.max(0, m.ptr.atras - 1);
+  unhl(); render();
+  narrate(`✔ quedó desconectado de los dos lados → el GC lo limpia.`, true);
+  setBusy(false);
+}
+
+async function dobleConsulta(p){
+  const m = model.doble, n = m.items.length;
+  codeHL("consulta");
+  if (p < 1 || p > n) return narrate(`<b>consulta(${p})</b> ✗ viola la PRE: 0 &lt; pos ≤ cantidad (${n})`);
+  setBusy(true); clearLog(); unhl();
+  narrate(`<b>consulta(${p})</b> — con dos puntas + doble enlace, se elige <b>el extremo más cercano</b>`);
+  await sleep(700);
+  const desdeAdelante = (p - 1) <= (n - p);
+  narrate(desdeAdelante
+    ? `pos ${p} está más cerca del FRENTE → aux sale de <span class="rulechip">primero</span> y camina con <b>siguiente</b>`
+    : `pos ${p} está más cerca del FINAL → aux sale de <span class="rulechip">ultimo</span> y camina con <b>anterior</b> (¡en la simple esto era imposible!)`);
+  await sleep(800);
+  if (desdeAdelante){
+    for (let i = 0; i < p; i++){ m.ptr.aux = i; hl(i); render(); narrate(`&nbsp;&nbsp;salto → pos ${i + 1}`); await sleep(550); }
+  } else {
+    for (let i = n - 1; i >= p - 1; i--){ m.ptr.aux = i; hl(i); render(); narrate(`&nbsp;&nbsp;salto ← pos ${i + 1}`); await sleep(550); }
+  }
+  hit(p - 1); m.ptr.aux = null; render();
+  narrate(`✔ devolvió <b>${peliStr(m.items[p - 1].v)}</b> en ${Math.min(p, n - p + 1)} saltos — la mitad que una lista simple en el peor caso.`, true);
+  await sleep(900); unhl(); render(); setBusy(false);
+}
+
+function dobleIniciar(){
+  const m = model.doble;
+  codeHL("cursor");
+  m.ptr.actual = m.items.length ? 0 : null;
+  m.ptr.atras = m.items.length ? m.items.length - 1 : null;
+  narrate(`<b>iniciar()</b> — <span class="rulechip">actual</span> arranca en primero y <span class="rulechip">atras</span> en ultimo: <b>dos cursores, dos sentidos</b>`);
+  unhl(); render();
+}
+
+async function dobleSig(){
+  const m = model.doble;
+  codeHL("cursor");
+  if (busy) return;
+  if (m.ptr.actual === null) return narrate(`<b>obtenerSiguiente()</b> ✗ actual ya terminó (null)`);
+  setBusy(true);
+  const i = m.ptr.actual;
+  hit(i); render();
+  narrate(`<b>obtenerSiguiente()</b> → ${peliStr(m.items[i].v)} y avanza por <b>siguiente</b>`);
+  await sleep(800);
+  m.ptr.actual = (i + 1 < m.items.length) ? i + 1 : null;
+  unhl(); render(); setBusy(false);
+}
+
+async function dobleAnt(){
+  const m = model.doble;
+  codeHL("cursor");
+  if (busy) return;
+  if (m.ptr.atras === null) return narrate(`<b>obtenerAnterior()</b> ✗ atras ya terminó (null)`);
+  setBusy(true);
+  const i = m.ptr.atras;
+  hit(i); render();
+  narrate(`<b>obtenerAnterior()</b> → ${peliStr(m.items[i].v)} y retrocede por <b>anterior</b>`);
+  await sleep(800);
+  m.ptr.atras = (i - 1 >= 0) ? i - 1 : null;
+  unhl(); render(); setBusy(false);
+}
+
+/* ================= LISTA CIRCULAR ================= */
+async function circAlta(v){
+  const m = model.circular;
+  codeHL("alta");
+  setBusy(true); clearLog(); unhl();
+  narrate(`<b>alta(${nm(v)})</b> — encolar al final: el nuevo se suma al círculo`);
+  await sleep(600);
+  const vacia = !m.items.length;
+  const it = mk(v);
+  m.items.push(it); render();
+  if (vacia){
+    narrate(`cola vacía → <span class="rulechip">primero = ultimo = nuevo</span> y su <b>siguiente apunta a sí mismo</b>: un círculo de uno`);
+    m.ptr.primero = 0; m.ptr.ultimo = 0;
+  } else {
+    narrate(`paso 1: <span class="rulechip">nuevo.siguiente = primero</span> — el nuevo ya nace apuntando de vuelta al frente`);
+    await sleep(700);
+    narrate(`paso 2: <span class="rulechip">ultimo.siguiente = nuevo</span> — el viejo último suelta el círculo y engancha al nuevo`);
+    m.ptr.ultimo = m.items.length - 2; hotEdge(m.items.length - 2); render();
+    await sleep(900);
+    narrate(`paso 3: <span class="rulechip">ultimo = nuevo</span> — el nuevo cierra el círculo`);
+    unhot(); m.ptr.ultimo = m.items.length - 1; render();
+  }
+  await sleep(1300);
+  narrate(`✔ el círculo quedó cerrado de nuevo: el último siempre vuelve a primero. Con <span class="rulechip">ultimo</span> tenés frente y fondo en O(1).`, true);
+  setBusy(false);
+}
+
+async function circBaja(){
+  const m = model.circular;
+  codeHL("baja");
+  setBusy(true); clearLog(); unhl();
+  if (!m.items.length){
+    narrate(`<b>baja()</b> ✗ PRE violada: <b>vacia() = true</b>`);
+    await sleep(1500); setBusy(false); return;
+  }
+  narrate(`<b>baja()</b> — sale el del frente, <span class="rulechip">primero</span>`);
+  hl(0); render(); await sleep(700);
+  narrate(`<span class="rulechip">primero = primero.siguiente</span> y <span class="rulechip">ultimo.siguiente = nuevo primero</span>: el círculo <b>se vuelve a cerrar</b> saltando el nodo que se fue`);
+  const it = m.items[0];
+  it.el.classList.add("leaveX"); it.edgeEl.style.opacity = 0;
+  await sleep(750);
+  m.items.shift(); it.el.remove(); it.el = null;
+  m.ptr.primero = m.items.length ? 0 : null;
+  m.ptr.ultimo = m.items.length ? m.items.length - 1 : null;
+  if (m.ptr.actual !== null && m.ptr.actual >= m.items.length) m.ptr.actual = m.items.length ? 0 : null;
+  unhl(); render();
+  narrate(`✔ salió <b>${peliStr(it.v)}</b>. Fijate que <span class="rulechip">ultimo</span> volvió a apuntar de vuelta al nuevo frente — nunca queda una flecha colgando.`, true);
+  setBusy(false);
+}
+
+function circIniciar(){
+  const m = model.circular;
+  codeHL("cursor");
+  m.ptr.actual = m.items.length ? 0 : null;
+  narrate(`<b>iniciar()</b> — el cursor arranca en primero`);
+  unhl(); render();
+}
+
+async function circSig(){
+  const m = model.circular;
+  codeHL("cursor");
+  if (busy) return;
+  if (m.ptr.actual === null) return narrate(`<b>obtenerSiguiente()</b> ✗ actual es null (lista vacía o sin iniciar)`);
+  setBusy(true);
+  const i = m.ptr.actual;
+  hit(i); render();
+  narrate(`<b>obtenerSiguiente()</b> → ${peliStr(m.items[i].v)} y avanza por <b>siguiente</b>`);
+  await sleep(800);
+  const next = i + 1;
+  m.ptr.actual = next < m.items.length ? next : 0;
+  unhl(); render();
+  narrate(next < m.items.length
+    ? `actual → siguiente nodo`
+    : `⚠️ actual <b>volvió a primero</b>: en la circular NO hay null — la vuelta es eterna. Para cortar hay que comparar contra primero o contar cantidad (si no: bucle infinito).`);
+  setBusy(false);
+}
+
+/* ================= ÁRBOL (ABB por id) ================= */
+async function arbolAlta(v){
+  const m = model.arbol;
+  setBusy(true); clearLog(); unhl();
+  narrate(`<b>alta(${nm(v)})</b> — en un árbol binario de búsqueda la posición la decide el <b>id</b>: aux baja desde <span class="rulechip">raiz</span> comparando`);
+  await sleep(700);
+  if (m.raiz < 0){
+    m.items.push(mk(v)); m.raiz = 0; m.ptr.raiz = 0; render();
+    narrate(`✔ el árbol estaba vacío → el nuevo ES la <span class="rulechip">raiz</span>.`, true);
+    setBusy(false); return;
+  }
+  let i = m.raiz;
+  while (true){
+    const cur = m.items[i];
+    if (v.id === cur.v.id){
+      m.ptr.aux = null; unhl(); render();
+      narrate(`✗ id ${v.id} ya existe en ${nm(cur.v)} → un ABB no repite (compareTo = 0)`, false);
+      setBusy(false); return;
+    }
+    m.ptr.aux = i; hl(i); render();
+    const dir = v.id < cur.v.id ? "izq" : "der";
+    narrate(`&nbsp;&nbsp;aux en ${nm(cur.v)} (id ${cur.v.id}): ${v.id} ${v.id < cur.v.id ? "&lt;" : "&gt;"} ${cur.v.id} → baja por ${dir === "izq" ? "IZQUIERDA ↙" : "DERECHA ↘"}`);
+    await sleep(850);
+    if (cur[dir] < 0){
+      const it = mk(v); it.padre = i; cur[dir] = m.items.length; m.items.push(it);
+      m.ptr.aux = null; unhl(); render();
+      narrate(`la rama ${dir} era ∅ → el nuevo nace <b>colgado ahí</b>: un solo padre, un solo camino desde la raíz`);
+      await sleep(1300);
+      narrate(`✔ ${nm(v)} quedó como hijo ${dir === "izq" ? "izquierdo" : "derecho"} de ${nm(cur.v)}. Ni un nodo se movió: solo una flecha nueva.`, true);
+      setBusy(false); return;
+    }
+    i = cur[dir];
+  }
+}
+
+async function arbolConsulta(id){
+  const m = model.arbol;
+  if (m.raiz < 0) return narrate(`<b>consulta(${id})</b> ✗ el árbol está vacío`);
+  setBusy(true); clearLog(); unhl();
+  narrate(`<b>consulta(id ${id})</b> — buscar bajando por compareTo, sin caminar todo`);
+  await sleep(700);
+  let i = m.raiz, pasos = 0;
+  while (i >= 0){
+    const cur = m.items[i]; pasos++;
+    m.ptr.aux = i; hl(i); render();
+    if (id === cur.v.id){
+      hit(i); m.ptr.aux = null; render();
+      narrate(`✔ encontró <b>${peliStr(cur.v)}</b> en ${pasos} saltos → O(h), la ALTURA. En una lista podrían ser hasta ${m.items.length}.`, true);
+      await sleep(1000); unhl(); render(); setBusy(false); return;
+    }
+    narrate(`&nbsp;&nbsp;aux en ${nm(cur.v)} (id ${cur.v.id}): ${id} ${id < cur.v.id ? "&lt;" : "&gt;"} ${cur.v.id} → ${id < cur.v.id ? "↙ descarta toda la derecha" : "↘ descarta toda la izquierda"}`);
+    await sleep(800);
+    i = id < cur.v.id ? cur.izq : cur.der;
+  }
+  m.ptr.aux = null; unhl(); render();
+  narrate(`✗ aux cayó en ∅ → id ${id} <b>no está</b>. Y fijate: solo miró ${pasos} nodos de ${m.items.length} — cada decisión tira media rama.`);
+  setBusy(false);
+}
+
+async function arbolRec(tipo){
+  const m = model.arbol;
+  if (m.raiz < 0) return narrate(`recorrido ✗ el árbol está vacío`);
+  setBusy(true); clearLog(); unhl();
+  const NOMBRES = { in: "inOrden (izq → nodo → der)", pre: "preOrden (nodo → izq → der)", post: "postOrden (izq → der → nodo)" };
+  const ord = [];
+  const w = i => {
+    if (i < 0) return;
+    if (tipo === "pre") ord.push(i);
+    w(m.items[i].izq);
+    if (tipo === "in") ord.push(i);
+    w(m.items[i].der);
+    if (tipo === "post") ord.push(i);
+  };
+  w(m.raiz);
+  narrate(`<b>${NOMBRES[tipo]}</b> — visitar todos siguiendo una regla fija (recursivo: cada nodo repite la misma receta con sus hijos)`);
+  await sleep(700);
+  const nombr = [];
+  for (let k = 0; k < ord.length; k++){
+    const i = ord[k];
+    m.ptr.aux = i; hit(i); render();
+    nombr.push(nm(m.items[i].v));
+    narrate(`&nbsp;&nbsp;visita ${k + 1}: <b>${peliStr(m.items[i].v)}</b>`);
+    await sleep(750);
+  }
+  m.ptr.aux = null; unhl(); render();
+  const extra = tipo === "in"
+    ? ` <b>FIJATE:</b> los ids salieron ORDENADOS — inOrden en un ABB devuelve los datos en orden de compareTo. Por eso el árbol reemplaza a "lista ordenada" cuando hay muchas búsquedas.`
+    : tipo === "pre" ? ` PreOrden visita antes de bajar → sirve para copiar el árbol con su misma forma.` : ` PostOrden visita al final → sirve para borrar o evaluar (los hijos primero que el padre).`;
+  narrate(`✔ orden de visita: <b>${nombr.join(" → ")}</b>.${extra}`, true);
+  setBusy(false);
+}
+
+/* ================= GRAFO ================= */
+async function gAddV(v){
+  const m = model.grafo;
+  if (m.items.length >= 6) return narrate(`<b>altaVertice(${v})</b> ✗ el tablero muestra hasta 6 vértices`);
+  setBusy(true); clearLog(); unhl();
+  narrate(`<b>altaVertice(${v})</b> — un vértice es como un nodo, pero en vez de UNA flecha guarda una <b>lista de vecinos</b>`);
+  await sleep(600);
+  m.items.push(mk({ nombre: String(v || "?").slice(0, 3) })); render();
+  await sleep(900);
+  narrate(`✔ existe el vértice — todavía está aislado: sin aristas, ningún recorrido lo alcanza. Conectalo con altaArista.`, true);
+  setBusy(false);
+}
+
+async function gAddE(a, b){
+  const m = model.grafo, n = m.items.length;
+  if (a < 1 || a > n || b < 1 || b > n) return narrate(`<b>altaArista(${a},${b})</b> ✗ los vértices válidos son 1..${n}`);
+  if (a === b) return narrate(`<b>altaArista(${a},${b})</b> ✗ una arista de un vértice a sí mismo no aporta acá`);
+  const i = a - 1, j = b - 1;
+  if (m.items[i].vecinos.includes(j)) return narrate(`<b>altaArista(${a},${b})</b> ✗ ${nm(m.items[i].v)} y ${nm(m.items[j].v)} ya son vecinos`);
+  setBusy(true); clearLog(); unhl();
+  narrate(`<b>altaArista(${nm(m.items[i].v)} ↔ ${nm(m.items[j].v)})</b> — cada uno se agrega a la lista de vecinos del otro (grafo no dirigido)`);
+  hl(i); hl(j); render(); await sleep(800);
+  m.items[i].vecinos.push(j); m.items[j].vecinos.push(i);
+  render(); await sleep(900);
+  narrate(`✔ arista creada. Mirá que no hay primero, raiz ni orden: el grafo es SOLO vértices + conexiones — y permite ciclos (ej. A→B→D→C→A).`, true);
+  unhl(); render(); setBusy(false);
+}
+
+async function gBFS(){
+  const m = model.grafo;
+  if (!m.items.length) return narrate(`BFS ✗ grafo vacío`);
+  setBusy(true); clearLog(); unhl();
+  narrate(`<b>BFS</b> — recorrer POR NIVELES usando una <b>cola</b>: visito, encolo a mis vecinos, y repito en orden de llegada`);
+  await sleep(700);
+  const vis = new Array(m.items.length).fill(false), cola = [0];
+  vis[0] = true;
+  m.items[0].el.classList.add("visited");
+  narrate(`arranco en <b>${nm(m.items[0].v)}</b> → lo marco visitado y entra a la cola: [ ${nm(m.items[0].v)} ]`);
+  render(); await sleep(900);
+  while (cola.length){
+    const i = cola.shift();
+    m.ptr.actual = i; hit(i); render();
+    const nuevos = m.items[i].vecinos.filter(j => !vis[j]);
+    nuevos.forEach(j => { vis[j] = true; cola.push(j); m.items[j].el.classList.add("visited"); });
+    narrate(`&nbsp;&nbsp;desencolé <b>${nm(m.items[i].v)}</b> → encolo sus vecinos nuevos → cola: [ ${cola.map(j => nm(m.items[j].v)).join(", ") || "—"} ]`);
+    await sleep(1000);
+  }
+  narrate(`✔ visitó todos los alcanzables, <b>por distancia</b>. El conjunto <b>visitados</b> es el corte: sin él, los ciclos mandan en bucle infinito — igual que la lista circular, pero acá no hay "primero" para comparar.`, true);
+  await sleep(1400);
+  m.items.forEach(it => it.el && it.el.classList.remove("visited"));
+  m.ptr.actual = null; unhl(); render(); setBusy(false);
+}
+
+async function gDFS(){
+  const m = model.grafo;
+  if (!m.items.length) return narrate(`DFS ✗ grafo vacío`);
+  setBusy(true); clearLog(); unhl();
+  narrate(`<b>DFS</b> — recorrer A FONDO usando una <b>pila</b>: me mando por una rama hasta el fondo antes de volver`);
+  await sleep(700);
+  const vis = new Array(m.items.length).fill(false), pila = [0];
+  while (pila.length){
+    const i = pila.pop();
+    if (vis[i]) continue;
+    vis[i] = true;
+    m.ptr.actual = i; hit(i); m.items[i].el.classList.add("visited"); render();
+    m.items[i].vecinos.forEach(j => { if (!vis[j]) pila.push(j); });
+    narrate(`&nbsp;&nbsp;desapilé <b>${nm(m.items[i].v)}</b> → apilo sus vecinos no visitados → pila: [ ${pila.map(j => nm(m.items[j].v)).join(", ") || "—"} ]`);
+    await sleep(1000);
+  }
+  narrate(`✔ mismo grafo, otro orden: <b>BFS = cola, DFS = pila</b>. El problema es el mismo (visitar sin repetir); la estructura que elijas define el orden del recorrido.`, true);
+  await sleep(1400);
+  m.items.forEach(it => it.el && it.el.classList.remove("visited"));
+  m.ptr.actual = null; unhl(); render(); setBusy(false);
+}
+
+const CMP_HTML = `
+<table>
+<thead><tr><th></th><th>Lista</th><th>Pila</th><th>Cola</th><th>Doble</th><th>Circular</th><th>Árbol</th><th>Grafo</th></tr></thead>
+<tbody>
+<tr><td>Forma</td><td>lineal</td><td>lineal</td><td>lineal</td><td>lineal</td><td>lineal cerrada</td><td>jerárquica</td><td>red</td></tr>
+<tr><td>Regla de acceso</td><td>por posición</td><td>solo tope (LIFO)</td><td>fondo entra, frente sale (FIFO)</td><td>por posición, dos sentidos</td><td>extremos, sin fin</td><td>caminos únicos desde raiz</td><td>vecinos libres</td></tr>
+<tr><td>Punteros</td><td>primero</td><td>tope</td><td>primero + ultimo</td><td>primero + ultimo</td><td>primero + ultimo</td><td>raiz</td><td>ninguno*</td></tr>
+<tr><td>Flechas por nodo</td><td>1</td><td>0 o 1</td><td>1</td><td>2</td><td>1</td><td>2 (hijos)</td><td>N (vecinos)</td></tr>
+<tr><td>Insertar / borrar</td><td>O(1) parado, O(n) llegar</td><td>O(1)</td><td>O(1)</td><td>O(1) parado, 4 flechas</td><td>O(1)</td><td>O(h)</td><td>O(1) la arista</td></tr>
+<tr><td>Buscar</td><td>O(n)</td><td>O(n)</td><td>O(n)</td><td>O(n), la mitad</td><td>O(n) con corte</td><td>O(h) ≈ log n</td><td>BFS / DFS</td></tr>
+<tr><td>¿Ciclos?</td><td>no</td><td>no</td><td>no</td><td>no</td><td>sí, el fin vuelve</td><td>no, prohibidos</td><td>sí, permitidos</td></tr>
+<tr><td>Peligro al recorrer</td><td>—</td><td>vacia()</td><td>ultimo fantasma</td><td>doble de flechas</td><td>bucle infinito</td><td>desbalance</td><td>bucle sin visitados</td></tr>
+<tr><td>Modela</td><td>secuencias</td><td>deshacer, llamadas</td><td>turnos, buffers</td><td>atrás / adelante</td><td>rotaciones</td><td>jerarquías, búsqueda ordenada</td><td>mapas, redes</td></tr>
+</tbody></table>
+<div class="foot"><b>*El grafo no tiene puntero fijo:</b> entrás por cualquier vértice. Y la regla de oro: <b>lista → árbol → grafo = ir soltando restricciones</b>. La lista da 1 salida por nodo en una línea; el árbol permite 2 salidas pero prohíbe ciclos (jerarquía); el grafo permite cualquier conexión, ciclos incluidos. A más libertad, más flechas que mantener y más cuidado al recorrer.</div>`;
+
+/* ================= UI ================= */
+const CONCEPTS = {
+  lista: `<ul>
+    <li><b>La estructura sin reglas:</b> entrás y salís por cualquier posición. Pila y cola son solo listas con acceso restringido.</li>
+    <li><span class="rulechip">primero</span> no es un dato: es la flecha de entrada. Ser "primero" es un rol — depende de quién te apunta, no del nodo.</li>
+    <li>Insertar/borrar donde ya estás parado es O(1); <b>llegar</b> a una posición es O(n) — no hay índices, hay que caminar.</li>
+    <li>El <span class="rulechip">actual</span> (cursor) es el dedo que recorre la lista en O(n) total — sin él, recorrer con consulta(pos) costaría O(n²).</li>
+    <li><b>No ordena sola:</b> el orden es el de las posiciones que elegís. <span class="rulechip">compareTo</span> solo se usa si una operación lo pide — probá <b>altaOrdenada</b>.</li>
+    <li>Es <b>genérica</b>: la misma Lista sirve de <span class="rulechip">Lista&lt;Pelicula&gt;</span>, de enteros o de lo que sea — el nodo no sabe qué guarda.</li>
+  </ul>`,
+  pila: `<ul>
+    <li><b>LIFO</b> — el último en entrar es el primero en salir. Solo existe el <span class="rulechip">tope</span>.</li>
+    <li>La de tu profe es <b>estática</b>: array fijo (TAMANIO=${CAP}), sin nodos. ¿Por qué? Con un solo extremo no hacen falta flechas — el índice <span class="rulechip">ultimo</span> alcanza.</li>
+    <li>Restringir no es limitar: la restricción <b>es la semántica</b>. Deshacer, llamadas a métodos, "volver atrás" del browser → todo es pila.</li>
+    <li>Operar en vacía o llena rompe la <b>PRE</b> del método — el contrato PRE/POS es lo que la hace predecible.</li>
+  </ul>`,
+  doble: `<ul>
+    <li><b>Doble enlace:</b> cada nodo conoce al que le sigue Y al de atrás (<span class="rulechip">anterior</span> y <span class="rulechip">siguiente</span>). Mirá las flechas dobles entre nodos.</li>
+    <li>Insertar/borrar cuesta <b>4 reconexiones</b>, no 2 — más cómoda de navegar, más cara de mantener.</li>
+    <li><span class="rulechip">primero</span> + <span class="rulechip">ultimo</span> + <b>dos cursores</b>: consulta elige el extremo más cercano y los cursores caminan en ambos sentidos.</li>
+    <li>Modela ir para atrás y adelante: historial del browser, playlist, editor con undo/redo.</li>
+  </ul>`,
+  circular: `<ul>
+    <li><b>El último apunta al primero:</b> la cadena se cierra — la flecha punteada de abajo es <span class="rulechip">ultimo.siguiente → primero</span>. No hay ∅ al final.</li>
+    <li><b>Sin fin = ojo:</b> recorrer esperando null es un <b>bucle infinito</b>. El corte es <b>volver a primero</b> o contar la cantidad.</li>
+    <li>Con <span class="rulechip">ultimo</span> tenés las dos puntas en O(1): su siguiente ES el frente.</li>
+    <li>Modela lo cíclico: turnos que rotan, round-robin de CPU, una playlist en loop.</li>
+  </ul>`,
+  cola: `<ul>
+    <li><b>FIFO</b> — el primero en entrar es el primero en salir. Respeta el orden de llegada: es "justicia" en estructura.</li>
+    <li>Entra por <span class="rulechip">ultimo</span>, sale por <span class="rulechip">primero</span>: dos flechas porque las operaciones pasan en <b>los dos extremos</b>.</li>
+    <li>Sin <span class="rulechip">ultimo</span>, encolar sería O(n) (caminar hasta el final). Con él, entrada y salida son O(1).</li>
+    <li>Turnos, impresora, requests a un servidor, recorrido BFS por niveles → todo es cola.</li>
+  </ul>`,
+  arbol: `<ul>
+    <li><b>Jerarquía, no línea:</b> cada nodo tiene <span class="rulechip">izq</span> y <span class="rulechip">der</span> (hijos) y la única entrada es <span class="rulechip">raiz</span>. No hay "posición" ni "siguiente en la fila": hay caminos.</li>
+    <li><b>Sin ciclos:</b> ningún hijo puede volver arriba — cada nodo se alcanza por UN solo camino desde la raíz.</li>
+    <li><b>ABB</b> (árbol binario de búsqueda): el hijo izquierdo tiene id MENOR, el derecho MAYOR — compareTo aplicado nodo por nodo.</li>
+    <li>Insertar y buscar son <b>O(h)</b>, la altura — no O(n). Cada decisión descarta media rama: por eso existe.</li>
+    <li><b>inOrden devuelve ordenado por id</b> — probalo y mirá los ids salir 1, 3, 6, 8, 12, 14.</li>
+    <li>Modela jerarquías: filesystem, árbol de decisión, expresiones matemáticas, el DOM de esta página.</li>
+  </ul>`,
+  grafo: `<ul>
+    <li><b>Sin jerarquía ni reglas:</b> vértices conectados por aristas libres — cualquiera con cualquiera. No hay primero, raiz ni fin.</li>
+    <li>Cada vértice guarda una <b>lista de vecinos</b>: el grafo se construye CON las estructuras que ya viste (lista de adyacencia).</li>
+    <li><b>Los ciclos se permiten:</b> A→B→D→C→A. Por eso recorrer exige marcar <b>visitados</b> — sin eso, bucle infinito.</li>
+    <li>Los recorridos REUSAN las estructuras: <b>BFS usa cola</b> (por niveles), <b>DFS usa pila</b> (a fondo). Mismo problema, otra política.</li>
+    <li>Modela relaciones reales: mapas de rutas, redes sociales, links entre páginas, correlativas entre materias.</li>
+  </ul>`,
+  comparar: `<ul>
+    <li><b>La escala de libertad:</b> lista → árbol → grafo es soltar reglas — 1 salida por nodo → 2 salidas sin ciclos → aristas libres con ciclos.</li>
+    <li><b>Pila y cola</b> no son "otra estructura": son listas que se restringen a propósito. La restricción ES la semántica (LIFO/FIFO).</li>
+    <li><b>Lineal / jerárquica / red:</b> en la línea hay adelante y atrás; en el árbol hay niveles y padres; en el grafo solo hay conexiones.</li>
+    <li><b>El costo se lee en flechas:</b> más libertad = más referencias por nodo que mantener (1 → 2 → N) y más cuidado al recorrer.</li>
+  </ul>`,
+};
+
+const LEGENDS = {
+  lista: [["primero","var(--primero)"],["actual","var(--actual)"],["aux","var(--aux)"]],
+  pila:  [["tope","var(--tope)"]],
+  cola:  [["primero","var(--primero)"],["ultimo","var(--ultimo)"]],
+  doble: [["primero","var(--primero)"],["ultimo","var(--ultimo)"],["actual","var(--actual)"],["atras","#ff7ab8"],["aux","var(--aux)"]],
+  circular:[["primero","var(--primero)"],["ultimo","var(--ultimo)"],["actual","var(--actual)"],["aux","var(--aux)"]],
+  arbol: [["raiz","#37c6d0"],["aux","var(--aux)"]],
+  grafo: [["actual","var(--actual)"]],
+  comparar: [],
+};
+
+
+/* ================= CÓDIGO JAVA CANÓNICO =================
+   #@<op> marca el método que se resalta al ejecutar esa operación.
+   #@-     vuelve a neutro. Las fuentes de lista/pila/cola son las
+           de tu clase, verbatim; doble y circular están escritas
+           en el mismo estilo porque no las pasó el profe.        */
+const CODE = {
+lista: { titulo: "Nodo<T> + Lista<T> — las de tu clase, verbatim", src: `package estructuras;
+
+public class Nodo<T> {
+	private T dato;
+	private Nodo<T> siguiente;
+
+	public Nodo(T elem) {
+		dato = elem;
+		siguiente = null;
+	}
+	public Nodo(T elem, Nodo<T> sig) {
+		dato = elem;
+		siguiente = sig;
+	}
+	public T obtenerDato() { return dato; }
+	public void asignarDato(T dato) { this.dato = dato; }
+	public Nodo<T> obtenerSiguiente() { return siguiente; }
+	public void asignarSiguiente(Nodo<T> sig) { siguiente = sig; }
+}
+
+public class Lista<T> {
+	private Nodo<T> primero;
+	private Nodo<T> actual;
+	private int cantidad;
+
+	// PRE: -
+	// POS: crea una lista vacia
+	public Lista() {
+		primero = null;
+		actual = null;
+		cantidad = 0;
+	}
+#@alta
+	// PRE: 0 < pos <= obtenerCantidad() + 1
+	// POS: agrega el elemento en la posicion "pos"
+	public void alta(T elem, int pos) {
+		Nodo<T> nuevo = new Nodo<>(elem);
+		if (pos == 1) {
+			nuevo.asignarSiguiente(primero);
+			primero = nuevo;
+		}
+		else {
+			Nodo<T> anterior = obtenerNodo(pos - 1);
+			Nodo<T> posterior = anterior.obtenerSiguiente();
+			nuevo.asignarSiguiente(posterior);
+			anterior.asignarSiguiente(nuevo);
+		}
+		cantidad++;
+	}
+#@-
+	// PRE: -
+	// POS: devuelve la cantidad de elementos
+	public int obtenerCantidad() {
+		return cantidad;
+	}
+#@consulta
+	// PRE: 0 < pos <= obtenerCantidad()
+	// POS: devuelve el elemento en la posicion "pos"
+	public T consulta(int pos) {
+		Nodo<T> aux = obtenerNodo(pos);
+		return aux.obtenerDato();
+	}
+#@baja
+	// PRE: 0 < pos <= obtenerCantidad()
+	// POS: da de baja al elemento en la posicion "pos"
+	public void baja(int pos) {
+		if (pos == 1) {
+			primero = primero.obtenerSiguiente();
+		}
+		else {
+			Nodo<T> anterior = obtenerNodo(pos - 1);
+			Nodo<T> eliminar = anterior.obtenerSiguiente();
+			anterior.asignarSiguiente(eliminar.obtenerSiguiente());
+		}
+		cantidad--;
+	}
+#@cursor
+	// METODOS DEL CURSOR
+	public boolean haySiguiente() {
+		return (actual != null);
+	}
+	// PRE: haySiguiente() == true
+	// POS: devuelve el dato actual y avanza el cursor
+	public T obtenerSiguiente() {
+		T dato = actual.obtenerDato();
+		actual = actual.obtenerSiguiente();
+		return dato;
+	}
+	// POS: lleva el cursor al principio
+	public void iniciar() {
+		actual = primero;
+	}
+#@consulta
+	// PRE: 0 < pos <= obtenerCantidad()
+	// POS: devuelve el nodo que esta en la posicion "pos"
+	private Nodo<T> obtenerNodo(int pos) {
+		Nodo<T> aux = primero;
+		for (int i = 1; i < pos; i++)
+			aux = aux.obtenerSiguiente();
+		return aux;
+	}
+#@altaord
+	// EXTRA (no esta en tu clase): la unica que ORDENA.
+	// PRE: el elemento es Comparable (Pelicula compara por id)
+	// POS: inserta manteniendo el orden por clave
+	public void altaOrdenada(T elem) {
+		Nodo<T> nuevo = new Nodo<>(elem);
+		Nodo<T> aux = primero, anterior = null;
+		while (aux != null && ((Comparable<T>) aux.obtenerDato()).compareTo(elem) < 0) {
+			anterior = aux;
+			aux = aux.obtenerSiguiente();
+		}
+		if (anterior == null) primero = nuevo;
+		else                  anterior.asignarSiguiente(nuevo);
+		nuevo.asignarSiguiente(aux);
+		cantidad++;
+	}
+}` },
+pila: { titulo: "Pila<T> — implementación estática (la de tu clase)", src: `package estructuras;
+
+public class Pila<T> {
+	private int TAMANIO = 10;
+	private int ultimo;
+	private T elementos[];
+
+	// PRE: -
+	// POS: crea una pila vacia
+	@SuppressWarnings("unchecked")
+	public Pila() {
+		ultimo = 0;
+		elementos = (T[]) new Object[TAMANIO];
+	}
+#@alta
+	// PRE: la pila no esta llena -> llena() == false
+	// POS: agrega el elemento al final e incrementa el tamanio
+	public void alta(T elem) {
+		elementos[ultimo] = elem;
+		ultimo++;
+	}
+#@-
+	// PRE: -
+	// POS: devuelve true si la pila esta llena
+	public boolean llena() {
+		return (ultimo >= TAMANIO);
+	}
+#@consulta
+	// PRE: la pila no esta vacia -> vacia() == false
+	// POS: devuelve el ultimo elemento (sin sacarlo)
+	public T consulta() {
+		return elementos[ultimo - 1];
+	}
+#@-
+	// PRE: -
+	// POS: devuelve true si la pila esta vacia
+	public boolean vacia() {
+		return (ultimo == 0);
+	}
+#@baja
+	// PRE: la pila no esta vacia -> vacia() == false
+	// POS: da de baja al ultimo elemento
+	public void baja() {
+		ultimo--;
+		elementos[ultimo] = null;
+	}
+}` },
+cola: { titulo: "Cola<T> — implementación dinámica (la de tu clase)", src: `package estructuras;
+
+public class Cola<T> {
+	private Nodo<T> primero; // sale por aca: consulta y baja
+	private Nodo<T> ultimo;  // entra por aca: alta
+
+	// PRE: -
+	// POS: crea una cola vacia
+	public Cola() {
+		primero = null;
+		ultimo = null;
+	}
+#@alta
+	// PRE: -
+	// POS: agrega el elemento al final de la cola
+	public void alta(T elem) {
+		Nodo<T> nuevo = new Nodo<>(elem);   // paso 1
+		if (vacia()) {                      // paso 2A: primer elemento
+			primero = nuevo;
+		}
+		else {                              // paso 2B: encadena atras
+			ultimo.asignarSiguiente(nuevo);
+		}
+		ultimo = nuevo;                     // paso 3
+	}
+#@consulta
+	// PRE: la cola no esta vacia
+	// POS: devuelve el primer elemento (sin sacarlo)
+	public T consulta() {
+		return primero.obtenerDato();
+	}
+#@-
+	// PRE: -
+	// POS: devuelve true si la cola esta vacia
+	public boolean vacia() {
+		return (primero == null);
+	}
+#@baja
+	// PRE: la cola no esta vacia
+	// POS: da de baja al primer elemento
+	public void baja() {
+		primero = primero.obtenerSiguiente();
+		if (primero == null)
+			ultimo = null;   // quedo vacia: tambien resetea ultimo
+	}
+}` },
+doble: { titulo: "NodoDoble<T> + ListaDoble<T> — misma convención, escrita para la clase", src: `package estructuras;
+
+public class NodoDoble<T> {
+	private T dato;
+	private NodoDoble<T> siguiente;
+	private NodoDoble<T> anterior;      // la flecha nueva: conoce al de atras
+
+	public NodoDoble(T elem) {
+		dato = elem;
+		siguiente = null;
+		anterior = null;
+	}
+	public T obtenerDato() { return dato; }
+	public void asignarDato(T dato) { this.dato = dato; }
+	public NodoDoble<T> obtenerSiguiente() { return siguiente; }
+	public void asignarSiguiente(NodoDoble<T> n) { siguiente = n; }
+	public NodoDoble<T> obtenerAnterior() { return anterior; }
+	public void asignarAnterior(NodoDoble<T> n) { anterior = n; }
+}
+
+public class ListaDoble<T> {
+	private NodoDoble<T> primero;
+	private NodoDoble<T> ultimo;
+	private NodoDoble<T> actual;        // el foco: camina en AMBOS sentidos
+	private int cantidad;
+
+	public ListaDoble() {
+		primero = null;
+		ultimo = null;
+		actual = null;
+		cantidad = 0;
+	}
+#@alta
+	// PRE: 0 < pos <= obtenerCantidad() + 1
+	// POS: agrega en "pos" ajustando 4 punteros
+	public void alta(T elem, int pos) {
+		NodoDoble<T> nuevo = new NodoDoble<>(elem);
+		if (pos == 1) {
+			nuevo.asignarSiguiente(primero);
+			if (primero != null) primero.asignarAnterior(nuevo);
+			else                 ultimo = nuevo;   // estaba vacia
+			primero = nuevo;
+		}
+		else if (pos == cantidad + 1) {            // alta al final: O(1)
+			nuevo.asignarAnterior(ultimo);
+			ultimo.asignarSiguiente(nuevo);
+			ultimo = nuevo;
+		}
+		else {
+			NodoDoble<T> posterior = obtenerNodo(pos);
+			NodoDoble<T> anterior = posterior.obtenerAnterior();
+			anterior.asignarSiguiente(nuevo);
+			nuevo.asignarAnterior(anterior);
+			nuevo.asignarSiguiente(posterior);
+			posterior.asignarAnterior(nuevo);
+		}
+		cantidad++;
+	}
+#@baja
+	// PRE: 0 < pos <= obtenerCantidad()
+	// POS: quita el de "pos"; saltan 2 flechas, una por sentido
+	public void baja(int pos) {
+		NodoDoble<T> eliminar = obtenerNodo(pos);
+		NodoDoble<T> anterior = eliminar.obtenerAnterior();
+		NodoDoble<T> posterior = eliminar.obtenerSiguiente();
+		if (anterior == null)  primero = posterior;
+		else                   anterior.asignarSiguiente(posterior);
+		if (posterior == null) ultimo = anterior;
+		else                   posterior.asignarAnterior(anterior);
+		cantidad--;
+	}
+#@consulta
+	// PRE: 0 < pos <= obtenerCantidad()
+	// POS: devuelve el elemento de "pos"
+	public T consulta(int pos) {
+		return obtenerNodo(pos).obtenerDato();
+	}
+
+	public int obtenerCantidad() { return cantidad; }
+	public boolean vacia() { return (primero == null); }
+#@cursor
+	// CURSOR: un solo foco, dos direcciones
+	public void iniciar() { actual = primero; }
+	public void iniciarDesdeAtras() { actual = ultimo; }
+	public boolean haySiguiente() { return (actual != null); }
+	public T obtenerSiguiente() {
+		T dato = actual.obtenerDato();
+		actual = actual.obtenerSiguiente();
+		return dato;
+	}
+	public T obtenerAnterior() {
+		T dato = actual.obtenerDato();
+		actual = actual.obtenerAnterior();
+		return dato;
+	}
+#@consulta
+	// camina desde el extremo mas cercano (la gracia de la doble)
+	private NodoDoble<T> obtenerNodo(int pos) {
+		NodoDoble<T> aux;
+		if (pos <= cantidad / 2) {
+			aux = primero;
+			for (int i = 1; i < pos; i++)
+				aux = aux.obtenerSiguiente();
+		}
+		else {
+			aux = ultimo;
+			for (int i = cantidad; i > pos; i--)
+				aux = aux.obtenerAnterior();
+		}
+		return aux;
+	}
+}` },
+circular: { titulo: "ListaCircular<T> — reutiliza Nodo<T>, escrita en el estilo de la clase", src: `package estructuras;
+
+public class ListaCircular<T> {
+	private Nodo<T> primero;   // el frente
+	private Nodo<T> ultimo;    // su siguiente SIEMPRE es primero: el circulo
+	private Nodo<T> actual;
+	private int cantidad;
+
+	public ListaCircular() {
+		primero = null;
+		ultimo = null;
+		actual = null;
+		cantidad = 0;
+	}
+#@alta
+	// PRE: -
+	// POS: entra detras de ultimo y el circulo se vuelve a cerrar
+	public void alta(T elem) {
+		Nodo<T> nuevo = new Nodo<>(elem);
+		if (vacia()) {
+			primero = nuevo;
+			nuevo.asignarSiguiente(nuevo);   // circulo de 1: se apunta a si mismo
+		}
+		else {
+			nuevo.asignarSiguiente(primero); // nace mirando al frente
+			ultimo.asignarSiguiente(nuevo);  // el viejo ultimo cede el circulo
+		}
+		ultimo = nuevo;
+		cantidad++;
+	}
+#@baja
+	// PRE: la lista no esta vacia
+	// POS: sale el primero; ultimo se reconecta al nuevo frente
+	public void baja() {
+		if (cantidad == 1) {
+			primero = null;
+			ultimo = null;
+		}
+		else {
+			primero = primero.obtenerSiguiente();
+			ultimo.asignarSiguiente(primero); // vuelve a cerrar el circulo
+		}
+		cantidad--;
+	}
+#@consulta
+	// PRE: la lista no esta vacia
+	// POS: devuelve el elemento del frente
+	public T consulta() {
+		return primero.obtenerDato();
+	}
+#@-
+	public boolean vacia() { return (primero == null); }
+	public int obtenerCantidad() { return cantidad; }
+#@cursor
+	// CURSOR: ojo, obtenerSiguiente NUNCA termina (da la vuelta)
+	public void iniciar() {
+		actual = primero;
+	}
+	// PRE: la lista no esta vacia
+	// POS: devuelve el dato y avanza; al final vuelve a primero
+	public T obtenerSiguiente() {
+		T dato = actual.obtenerDato();
+		actual = actual.obtenerSiguiente();   // si era ultimo -> primero
+		return dato;
+	}
+}` },
+arbol: { titulo: "Árbol — lo vemos en la próxima entrega", src: `// Todavía no: tu profe no pasó el TDA Arbol y nos concentramos
+// en las lineales. Cuando llegue, acá va a verse el código Java
+// junto a cada animación, igual que en lista/pila/cola.` },
+grafo: { titulo: "Grafo — lo vemos en la próxima entrega", src: `// Idem: el código del grafo (lista de adyacencia, BFS con cola,
+// DFS con pila) va acá cuando lo vean en clase.` },
+comparar: { titulo: "elegí una estructura para ver su código", src: `// Cambiá de pestaña: cada estructura lineal muestra su clase Java
+// real debajo del escenario, con el método resaltado mientras corre.` },
+};
+
+function buildCode(){
+	const c = CODE[mode];
+	document.getElementById("codetitle").textContent = c.titulo;
+	const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+	let cur = "";
+	document.getElementById("codeview").innerHTML = c.src.split("\n").map(line => {
+		const m = line.match(/^#@(\w+|-)$/);
+		if (m){ cur = (m[1] === "-") ? "" : m[1]; return ""; }
+		const cm = /^\s*\/\//.test(line) ? " cm" : "";
+		return `<div class="cl${cm}" data-op="${cur}">${esc(line) || " "}</div>`;
+	}).join("");
+}
+
+function codeHL(op){
+	const view = document.getElementById("codeview");
+	view.querySelectorAll(".cl.on").forEach(e => e.classList.remove("on"));
+	if (!op) return;
+	const lines = view.querySelectorAll(`.cl[data-op="${op}"]`);
+	lines.forEach(e => e.classList.add("on"));
+	if (lines.length) lines[0].scrollIntoView({block:"center"});
+}
+
+function buildControls(){
+  const c = document.getElementById("controls");
+  if (mode === "lista"){
+    c.innerHTML = `
+      <div class="row">
+        <input id="pid" class="w" type="number" value="3" title="id">
+        <input id="v" placeholder="nombre" maxlength="10" value="Nemo">
+        <input id="pp" class="w" type="number" value="8" title="puntaje">
+        <input id="p" class="w" type="number" min="1" value="2" title="posición">
+      </div>
+      <div class="row"><span class="lbl">new Pelicula(id, nombre, puntaje)</span>
+        <button class="op" onclick="listaAlta(peli(),+document.getElementById('p').value)">alta(peli, pos)</button>
+        <button class="op" onclick="listaAltaOrd(peli())">altaOrdenada(peli)</button>
+        <button class="op" onclick="listaBaja(+document.getElementById('p').value)">baja(pos)</button>
+        <button class="op" onclick="listaConsulta(+document.getElementById('p').value)">consulta(pos)</button>
+        <button class="op ghost" onclick="azar()">azar</button>
+      </div>
+      <div class="sep"></div>
+      <div class="row"><span class="lbl">CURSOR</span>
+        <button class="op" onclick="listaIniciar()">iniciar()</button>
+        <button class="op" onclick="listaSiguiente()">obtenerSiguiente()</button>
+      </div>`;
+  } else if (mode === "pila"){
+    c.innerHTML = `
+      <div class="row">
+        <input id="pid" class="w" type="number" value="11" title="id">
+        <input id="v" placeholder="nombre" maxlength="10" value="Rocky">
+        <input id="pp" class="w" type="number" value="9" title="puntaje">
+      </div>
+      <div class="row"><span class="lbl">new Pelicula(id, nombre, puntaje)</span>
+        <button class="op" onclick="pilaAlta(peli())">alta(peli) — push</button>
+        <button class="op" onclick="pilaBaja()">baja() — pop</button>
+        <button class="op" onclick="pilaConsulta()">consulta() — peek</button>
+        <button class="op ghost" onclick="azar()">azar</button>
+      </div>`;
+  } else if (mode === "doble"){
+    c.innerHTML = `
+      <div class="row">
+        <input id="pid" class="w" type="number" value="6" title="id">
+        <input id="v" placeholder="nombre" maxlength="10" value="Up">
+        <input id="pp" class="w" type="number" value="8" title="puntaje">
+        <input id="p" class="w" type="number" min="1" value="2" title="posición">
+      </div>
+      <div class="row"><span class="lbl">new Pelicula(id, nombre, puntaje)</span>
+        <button class="op" onclick="dobleAlta(peli(),+document.getElementById('p').value)">alta(peli, pos)</button>
+        <button class="op" onclick="dobleBaja(+document.getElementById('p').value)">baja(pos)</button>
+        <button class="op" onclick="dobleConsulta(+document.getElementById('p').value)">consulta(pos)</button>
+        <button class="op ghost" onclick="azar()">azar</button>
+      </div>
+      <div class="sep"></div>
+      <div class="row"><span class="lbl">2 CURSORES</span>
+        <button class="op" onclick="dobleIniciar()">iniciar()</button>
+        <button class="op" onclick="dobleSig()">obtenerSiguiente →</button>
+        <button class="op" onclick="dobleAnt()">← obtenerAnterior</button>
+      </div>`;
+  } else if (mode === "circular"){
+    c.innerHTML = `
+      <div class="row">
+        <input id="pid" class="w" type="number" value="18" title="id">
+        <input id="v" placeholder="nombre" maxlength="10" value="Rocky">
+        <input id="pp" class="w" type="number" value="9" title="puntaje">
+      </div>
+      <div class="row"><span class="lbl">new Pelicula(id, nombre, puntaje)</span>
+        <button class="op" onclick="circAlta(peli())">alta(peli) — al final</button>
+        <button class="op" onclick="circBaja()">baja() — frente</button>
+        <button class="op ghost" onclick="azar()">azar</button>
+      </div>
+      <div class="sep"></div>
+      <div class="row"><span class="lbl">CURSOR QUE DA LA VUELTA</span>
+        <button class="op" onclick="circIniciar()">iniciar()</button>
+        <button class="op" onclick="circSig()">obtenerSiguiente ↺</button>
+      </div>`;
+  } else if (mode === "arbol"){
+    c.innerHTML = `
+      <div class="row">
+        <input id="pid" class="w" type="number" value="5" title="id">
+        <input id="v" placeholder="nombre" maxlength="10" value="Cars">
+        <input id="pp" class="w" type="number" value="6" title="puntaje">
+        <input id="p" class="w" type="number" min="1" value="14" title="id a buscar">
+      </div>
+      <div class="row"><span class="lbl">new Pelicula(id, nombre, puntaje)</span>
+        <button class="op" onclick="arbolAlta(peli())">alta(peli) — por id</button>
+        <button class="op" onclick="arbolConsulta(+document.getElementById('p').value)">consulta(id)</button>
+        <button class="op ghost" onclick="azar()">azar</button>
+      </div>
+      <div class="sep"></div>
+      <div class="row"><span class="lbl">RECORRIDOS</span>
+        <button class="op" onclick="arbolRec('in')">inOrden</button>
+        <button class="op" onclick="arbolRec('pre')">preOrden</button>
+        <button class="op" onclick="arbolRec('post')">postOrden</button>
+      </div>`;
+  } else if (mode === "grafo"){
+    c.innerHTML = `
+      <div class="row">
+        <input id="v" placeholder="vértice" maxlength="3" value="F">
+        <input id="p" class="w" type="number" min="1" value="1" title="de (vértice n°)">
+        <input id="q" class="w" type="number" min="1" value="4" title="a (vértice n°)">
+      </div>
+      <div class="row"><span class="lbl">vértices: ${model.grafo.items.map((it, i) => (i + 1) + "=" + nm(it.v)).join(", ")}</span>
+        <button class="op" onclick="gAddV(document.getElementById('v').value)">altaVertice(nombre)</button>
+        <button class="op" onclick="gAddE(+document.getElementById('p').value,+document.getElementById('q').value)">altaArista(de, a)</button>
+      </div>
+      <div class="sep"></div>
+      <div class="row"><span class="lbl">RECORRIDOS (desde el vértice 1)</span>
+        <button class="op" onclick="gBFS()">BFS — por niveles (usa cola)</button>
+        <button class="op" onclick="gDFS()">DFS — a fondo (usa pila)</button>
+      </div>`;
+  } else if (mode === "comparar"){
+    c.innerHTML = `<div class="concept">No hay operaciones: es el resumen final. Volvé a las pestañas y mirá cada estructura sabiendo qué la hace distinta.</div>`;
+  } else {
+    c.innerHTML = `
+      <div class="row">
+        <input id="pid" class="w" type="number" value="18" title="id">
+        <input id="v" placeholder="nombre" maxlength="10" value="Rocky">
+        <input id="pp" class="w" type="number" value="9" title="puntaje">
+      </div>
+      <div class="row"><span class="lbl">new Pelicula(id, nombre, puntaje)</span>
+        <button class="op" onclick="colaAlta(peli())">alta(peli) — encolar</button>
+        <button class="op" onclick="colaBaja()">baja() — desencolar</button>
+        <button class="op" onclick="colaConsulta()">consulta() — frente</button>
+        <button class="op ghost" onclick="azar()">azar</button>
+      </div>`;
+  }
+  document.getElementById("concept").innerHTML = CONCEPTS[mode];
+  document.getElementById("legend").innerHTML =
+    LEGENDS[mode].map(([n,c]) => `<span><i class="dot" style="background:${c}"></i>${n}</span>`).join("");
+  buildCode();
+}
+
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  if (busy) return;
+  document.querySelectorAll(".tab").forEach(x => x.classList.remove("on"));
+  t.classList.add("on");
+  mode = t.dataset.m;
+  clearLog(); unhl();
+  narrate(t.dataset.m === "comparar"
+    ? `Modo <b>COMPARAR</b> — la tabla resume todo: forma, reglas de acceso, punteros, costos y peligros.`
+    : `Modo <b>${t.textContent}</b> — probá las operaciones y mirá las flechas.`);
+  buildControls(); render();
+});
+
+window.addEventListener("resize", render);
+narrate(`Bienvenido. Esta es una <b>Lista&lt;Pelicula&gt;</b>: cada caja es un nodo (una Película + flecha <b>siguiente</b>). Probá <b>consulta(pos)</b> y mirá cómo <span class="rulechip">aux</span> camina.`);
+buildControls(); render();
+</script>
+</body>
+</html>
