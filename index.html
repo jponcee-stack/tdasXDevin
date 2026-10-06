@@ -156,6 +156,11 @@
 .cl.op-alta,.cl.op-baja,.cl.op-consulta,.cl.op-cursor,.cl.op-altaord{transition:background .3s,border-color .3s}
 .cl.on{background:#1a2b45;border-left-color:var(--aux);color:#e6edf3}
 .cl.cm{color:#4a5b73}
+.codepanel h2{display:flex;align-items:center;justify-content:space-between}
+#codetoggle{background:#1a2b45;border:1px solid var(--line);color:#8fa3bd;border-radius:8px;
+            font-size:.66rem;padding:3px 10px;cursor:pointer;letter-spacing:.06em;text-transform:uppercase}
+#codetoggle:hover{color:#e6edf3;border-color:var(--aux)}
+.codepanel.big .code{max-height:calc(100vh - 260px)}
 </style>
 </head>
 <body>
@@ -182,7 +187,8 @@
       <div id="stage"></div>
     </section>
     <div class="codepanel">
-      <h2>Código Java — <span id="codetitle"></span></h2>
+      <h2>Código Java — <span id="codetitle"></span>
+        <button id="codetoggle" onclick="toggleCode()">ampliar</button></h2>
       <pre class="code" id="codeview"></pre>
     </div>
   </div>
@@ -1668,6 +1674,12 @@ function buildCode(){
 		const cm = /^\s*\/\//.test(line) ? " cm" : "";
 		return `<div class="cl${cm}" data-op="${cur}">${esc(line) || " "}</div>`;
 	}).join("");
+}
+
+function toggleCode(){
+	const p = document.querySelector(".codepanel"), b = document.getElementById("codetoggle");
+	const big = p.classList.toggle("big");
+	b.textContent = big ? "reducir" : "ampliar";
 }
 
 function codeHL(op){
