@@ -252,7 +252,7 @@ const model = {
   arbol: { items: [mk({id:8,nombre:"Up",puntaje:8}), mk({id:3,nombre:"Coco",puntaje:10}), mk({id:12,nombre:"Dune",puntaje:8}),
                    mk({id:1,nombre:"Rayo",puntaje:7}), mk({id:6,nombre:"Bambi",puntaje:6}), mk({id:14,nombre:"Rocky",puntaje:9})],
            raiz: 0,
-           ptr: { raiz: 0, aux: null } },
+           ptr: { raiz: 0, aux: null, suc: null } },
   grafo: { items: [mk({nombre:"A"}), mk({nombre:"B"}), mk({nombre:"C"}), mk({nombre:"D"}), mk({nombre:"E"})],
            ptr: { actual: null } },
   comparar:{ items: [], ptr: {} },
@@ -288,6 +288,7 @@ const PTR_DEF = {
   aux:     { color: "var(--aux)",     row: "up2",  label: "aux"     },
   atras:   { color: "#ff7ab8",        row: "up2",  label: "atras (cursor)" },
   raiz:    { color: "#37c6d0",        row: "down", label: "raiz" },
+  suc:     { color: "#ffb454",        row: "up2",  label: "suc" },
 };
 
 /* ---------- construcción DOM ---------- */
@@ -1008,8 +1009,30 @@ async function circSig(){
 }
 
 /* ================= ÁRBOL (ABB por id) ================= */
+/* saca físicamente el nodo idx del árbol y remapea todos los índices */
+function physRemove(idx){
+  const m = model.arbol, it = m.items[idx];
+  if (it.el){ it.el.remove(); it.el = null; }
+  if (it.edgeEl){ it.edgeEl.remove(); it.edgeEl = null; }
+  m.items.splice(idx, 1);
+  const fix = x => (x === undefined || x === null || x < 0) ? x : (x === idx ? -1 : (x > idx ? x - 1 : x));
+  m.items.forEach(n => { n.izq = fix(n.izq); n.der = fix(n.der); n.padre = fix(n.padre); });
+  m.raiz = fix(m.raiz);
+  m.ptr.raiz = m.raiz >= 0 ? m.raiz : null;
+  if (m.ptr.aux !== null) m.ptr.aux = fix(m.ptr.aux);
+  if (m.ptr.suc !== null) m.ptr.suc = fix(m.ptr.suc);
+}
+/* redibuja el texto del nodo cuando su dato cambia (caso 3: se copia el sucesor) */
+function refreshNode(it){
+  if (!it.el) return;
+  const pv = it.v;
+  it.el.querySelector(".dd").innerHTML = `<span>${pv.nombre}</span><small>id ${pv.id ?? "-"} · ★${pv.puntaje ?? "-"}</small>`;
+  it.el.title = peliStr(it.v);
+}
+
 async function arbolAlta(v){
   const m = model.arbol;
+  codeHL("alta");
   setBusy(true); clearLog(); unhl();
   narrate(`<b>alta(${nm(v)})</b> — en un árbol binario de búsqueda la posición la decide el <b>id</b>: aux baja desde <span class="rulechip">raiz</span> comparando`);
   await sleep(700);
@@ -1044,6 +1067,7 @@ async function arbolAlta(v){
 
 async function arbolConsulta(id){
   const m = model.arbol;
+  codeHL("consulta");
   if (m.raiz < 0) return narrate(`<b>consulta(${id})</b> ✗ el árbol está vacío`);
   setBusy(true); clearLog(); unhl();
   narrate(`<b>consulta(id ${id})</b> — buscar bajando por compareTo, sin caminar todo`);
@@ -1068,6 +1092,7 @@ async function arbolConsulta(id){
 
 async function arbolRec(tipo){
   const m = model.arbol;
+  codeHL("rec");
   if (m.raiz < 0) return narrate(`recorrido ✗ el árbol está vacío`);
   setBusy(true); clearLog(); unhl();
   const NOMBRES = { in: "inOrden (izq → nodo → der)", pre: "preOrden (nodo → izq → der)", post: "postOrden (izq → der → nodo)" };
@@ -1097,6 +1122,93 @@ async function arbolRec(tipo){
     : tipo === "pre" ? ` PreOrden visita antes de bajar → sirve para copiar el árbol con su misma forma.` : ` PostOrden visita al final → sirve para borrar o evaluar (los hijos primero que el padre).`;
   narrate(`✔ orden de visita: <b>${nombr.join(" → ")}</b>.${extra}`, true);
   setBusy(false);
+}
+
+async function arbolBaja(id){
+  const m = model.arbol;
+  codeHL("baja");
+  if (m.raiz < 0) return narrate(`<b>baja(id ${id})</b> ✗ el árbol está vacío`);
+  setBusy(true); clearLog(); unhl();
+  narrate(`<b>baja(id ${id})</b> — primero hay que encontrarlo: aux baja comparando, igual que consulta`);
+  await sleep(700);
+  let i = m.raiz;
+  while (i >= 0 && m.items[i].v.id !== id){
+    m.ptr.aux = i; hl(i); render();
+    narrate(`&nbsp;&nbsp;aux en ${nm(m.items[i].v)} (id ${m.items[i].v.id}): ${id} ${id < m.items[i].v.id ? "&lt;" : "&gt;"} ${m.items[i].v.id} → ${id < m.items[i].v.id ? "↙" : "↘"}`);
+    await sleep(750);
+    i = id < m.items[i].v.id ? m.items[i].izq : m.items[i].der;
+  }
+  if (i < 0){
+    m.ptr.aux = null; unhl(); render();
+    narrate(`✗ aux cayó en ∅ → id ${id} <b>no está</b> en el árbol.`);
+    setBusy(false); return;
+  }
+  const nodo = m.items[i];
+  m.ptr.aux = i; hit(i); render();
+  const hijos = (nodo.izq >= 0 ? 1 : 0) + (nodo.der >= 0 ? 1 : 0);
+  narrate(`encontró <b>${peliStr(nodo.v)}</b> → cuenta los hijos: <b>${hijos}</b>. De eso depende el caso`);
+  await sleep(1100);
+
+  // anima la salida del nodo idx, lo quita del modelo y remapea índices
+  const borrarFisico = async (idx, textoOk) => {
+    const it = m.items[idx];
+    it.el.classList.add("leave"); await sleep(700);
+    physRemove(idx);
+    m.ptr.aux = null; m.ptr.suc = null; unhl(); render();
+    narrate(textoOk, true);
+    setBusy(false);
+  };
+
+  const padre = nodo.padre;
+  if (hijos === 0){
+    narrate(`<b>CASO 1 — hoja:</b> nadie cuelga de él → el padre pone ∅ donde estaba y listo`);
+    await sleep(1200);
+    if (padre >= 0){
+      if (m.items[padre].izq === i) m.items[padre].izq = -1;
+      else m.items[padre].der = -1;
+    } else m.raiz = -1;
+    await borrarFisico(i, `✔ salió ${peliStr(nodo.v)}: quedó sin referencia → GC. El mismo principio que en la lista: <b>borrar es quedarse sin flecha que te apunte</b>.`);
+  } else if (hijos === 1){
+    const hijo = nodo.izq >= 0 ? nodo.izq : nodo.der;
+    narrate(`<b>CASO 2 — un hijo:</b> el padre <b>adopta al nieto</b>: la flecha que llegaba a ${nm(nodo.v)} ahora llega a ${nm(m.items[hijo].v)} — el subárbol entero sube un nivel`);
+    await sleep(1400);
+    if (padre >= 0){
+      if (m.items[padre].izq === i) m.items[padre].izq = hijo;
+      else m.items[padre].der = hijo;
+    } else m.raiz = hijo;
+    m.items[hijo].padre = padre;
+    await borrarFisico(i, `✔ el nieto ocupó el lugar del padre sin moverse: solo se reconectaron flechas, igual que baja() en la lista.`);
+  } else {
+    narrate(`<b>CASO 3 — dos hijos:</b> no se puede desconectar el nodo (¿a dónde van las DOS ramas?). La idea: <b>no se borra el nodo, se borra el dato</b> — se copia encima el valor del sucesor`);
+    await sleep(1500);
+    narrate(`paso 1 — el <b>sucesor inOrden</b> es el MENOR del subárbol derecho: <span class="rulechip">suc</span> da UN paso a la derecha y después TODO a la izquierda`);
+    await sleep(1100);
+    let s = nodo.der;
+    m.ptr.suc = s; hl(s); render();
+    narrate(`&nbsp;&nbsp;suc → der: ${nm(m.items[s].v)} (id ${m.items[s].v.id})`);
+    await sleep(950);
+    while (m.items[s].izq >= 0){
+      s = m.items[s].izq;
+      m.ptr.suc = s; hl(s); render();
+      narrate(`&nbsp;&nbsp;suc sigue ↙ → ${nm(m.items[s].v)} (id ${m.items[s].v.id})`);
+      await sleep(950);
+    }
+    narrate(`no hay más izquierda → <b>${peliStr(m.items[s].v)}</b> es el sucesor: mayor que todo el subárbol izquierdo y menor que el resto de la derecha — el ÚNICO dato que puede ocupar ese lugar sin romper la regla`);
+    await sleep(1600);
+    narrate(`paso 2 — <b>copiar el dato</b>: el nodo ahora vale ${peliStr(m.items[s].v)} (mirá el cambio de nombre/id en la caja)`);
+    nodo.v = { ...m.items[s].v };
+    refreshNode(nodo); hit(i); render();
+    await sleep(1500);
+    narrate(`paso 3 — borrar <b>al sucesor</b> de su lugar original. La gracia: al ser el mínimo NO tiene hijo izquierdo → tiene 0 o 1 hijo → cae en un caso fácil (1 o 2)`);
+    await sleep(1500);
+    const sHijo = m.items[s].der, sPadre = m.items[s].padre;
+    if (sPadre >= 0){
+      if (m.items[sPadre].izq === s) m.items[sPadre].izq = sHijo;
+      else m.items[sPadre].der = sHijo;
+    } else m.raiz = sHijo;
+    if (sHijo >= 0) m.items[sHijo].padre = sPadre;
+    await borrarFisico(s, `✔ id ${id} eliminado y el árbol sigue ordenado — corré <b>inOrden</b> y comprobalo. Moraleja: <b>no muevas estructura, mové el dato</b>.`);
+  }
 }
 
 /* ================= GRAFO ================= */
@@ -1230,6 +1342,7 @@ const CONCEPTS = {
     <li><b>ABB</b> (árbol binario de búsqueda): el hijo izquierdo tiene id MENOR, el derecho MAYOR — compareTo aplicado nodo por nodo.</li>
     <li>Insertar y buscar son <b>O(h)</b>, la altura — no O(n). Cada decisión descarta media rama: por eso existe.</li>
     <li><b>inOrden devuelve ordenado por id</b> — probalo y mirá los ids salir 1, 3, 6, 8, 12, 14.</li>
+    <li><b>baja según los hijos:</b> hoja → desconectarlo; un hijo → el padre adopta al nieto; <b>dos hijos → se copia el sucesor</b> (el menor del derecho) y se borra ESE nodo, que siempre cae en caso fácil. Probá <b>baja(8)</b>: la raíz tiene dos hijos.</li>
     <li>Modela jerarquías: filesystem, árbol de decisión, expresiones matemáticas, el DOM de esta página.</li>
   </ul>`,
   grafo: `<ul>
@@ -1253,7 +1366,7 @@ const LEGENDS = {
   cola:  [["primero","var(--primero)"],["ultimo","var(--ultimo)"]],
   doble: [["primero","var(--primero)"],["ultimo","var(--ultimo)"],["actual","var(--actual)"],["atras","#ff7ab8"],["aux","var(--aux)"]],
   circular:[["primero","var(--primero)"],["ultimo","var(--ultimo)"],["actual","var(--actual)"],["aux","var(--aux)"]],
-  arbol: [["raiz","#37c6d0"],["aux","var(--aux)"]],
+  arbol: [["raiz","#37c6d0"],["aux","var(--aux)"],["suc","#ffb454"]],
   grafo: [["actual","var(--actual)"]],
   comparar: [],
 };
@@ -1654,9 +1767,92 @@ public class ListaCircular<T> {
 		return dato;
 	}
 }` },
-arbol: { titulo: "Árbol — lo vemos en la próxima entrega", src: `// Todavía no: tu profe no pasó el TDA Arbol y nos concentramos
-// en las lineales. Cuando llegue, acá va a verse el código Java
-// junto a cada animación, igual que en lista/pila/cola.` },
+arbol: { titulo: "NodoArbol<T> + ArbolBinario<T> — escrito en el estilo de tu clase (el profe aún no lo pasó)", src: `package estructuras;
+
+public class NodoArbol<T> {
+	private T dato;
+	private NodoArbol<T> izq, der;
+
+	public NodoArbol(T elem) { dato = elem; izq = der = null; }
+	public T obtenerDato() { return dato; }
+	public void asignarDato(T dato) { this.dato = dato; }
+	public NodoArbol<T> obtenerIzquierdo() { return izq; }
+	public void asignarIzquierdo(NodoArbol<T> n) { izq = n; }
+	public NodoArbol<T> obtenerDerecho() { return der; }
+	public void asignarDerecho(NodoArbol<T> n) { der = n; }
+}
+
+// T extends Comparable: el árbol ordena por compareTo, igual que altaOrdenada en Lista
+public class ArbolBinario<T extends Comparable<T>> {
+	private NodoArbol<T> raiz;
+
+	public ArbolBinario() { raiz = null; }
+	public boolean vacio() { return raiz == null; }
+
+#@alta
+	// POS: inserta x respetando la regla izq < padre < der (no repite)
+	public void alta(T x) {
+		if (raiz == null) { raiz = new NodoArbol<T>(x); return; }
+		NodoArbol<T> aux = raiz, padre = null;
+		int cmp = 0;
+		while (aux != null) {              // baja comparando hasta caer en null
+			padre = aux;
+			cmp = x.compareTo(aux.obtenerDato());
+			if (cmp == 0) return;          // duplicado: el ABB no repite
+			aux = (cmp < 0) ? aux.obtenerIzquierdo() : aux.obtenerDerecho();
+		}
+		if (cmp < 0) padre.asignarIzquierdo(new NodoArbol<T>(x));
+		else         padre.asignarDerecho(new NodoArbol<T>(x));
+	}
+#@-
+
+#@consulta
+	// POS: devuelve el dato igual a x, o null — O(h), la altura
+	public T consulta(T x) {
+		NodoArbol<T> aux = raiz;
+		while (aux != null) {
+			int cmp = x.compareTo(aux.obtenerDato());
+			if (cmp == 0) return aux.obtenerDato();
+			aux = (cmp < 0) ? aux.obtenerIzquierdo() : aux.obtenerDerecho();
+		}
+		return null;
+	}
+#@-
+
+#@baja
+	// POS: elimina el dato igual a x manteniendo la regla del ABB
+	public void baja(T x) { raiz = bajar(raiz, x); }
+
+	private NodoArbol<T> bajar(NodoArbol<T> n, T x) {
+		if (n == null) return null;
+		int cmp = x.compareTo(n.obtenerDato());
+		if (cmp < 0) n.asignarIzquierdo(bajar(n.obtenerIzquierdo(), x));
+		else if (cmp > 0) n.asignarDerecho(bajar(n.obtenerDerecho(), x));
+		else {                                     // encontró el nodo a borrar
+			if (n.obtenerIzquierdo() == null) return n.obtenerDerecho();  // 0 o 1 hijo
+			if (n.obtenerDerecho() == null)   return n.obtenerIzquierdo();
+			// DOS HIJOS: copia el sucesor (el menor del derecho) y lo borra abajo
+			NodoArbol<T> suc = n.obtenerDerecho();
+			while (suc.obtenerIzquierdo() != null) suc = suc.obtenerIzquierdo();
+			n.asignarDato(suc.obtenerDato());                          // mueve el DATO
+			n.asignarDerecho(bajar(n.obtenerDerecho(), suc.obtenerDato()));
+		}
+		return n;
+	}
+#@-
+
+#@rec
+	// POS: inOrden visita izq -> nodo -> der y sale ORDENADO por clave
+	public void inOrden() { inOrden(raiz); }
+	private void inOrden(NodoArbol<T> n) {
+		if (n == null) return;
+		inOrden(n.obtenerIzquierdo());
+		visitar(n.obtenerDato());            // acá se "lee" el nodo
+		inOrden(n.obtenerDerecho());
+	}
+	// preOrden: visitar, izq, der   |   postOrden: izq, der, visitar
+#@-
+}` },
 grafo: { titulo: "Grafo — lo vemos en la próxima entrega", src: `// Idem: el código del grafo (lista de adyacencia, BFS con cola,
 // DFS con pila) va acá cuando lo vean en clase.` },
 comparar: { titulo: "elegí una estructura para ver su código", src: `// Cambiá de pestaña: cada estructura lineal muestra su clase Java
@@ -1768,10 +1964,11 @@ function buildControls(){
         <input id="pid" class="w" type="number" value="5" title="id">
         <input id="v" placeholder="nombre" maxlength="10" value="Cars">
         <input id="pp" class="w" type="number" value="6" title="puntaje">
-        <input id="p" class="w" type="number" min="1" value="14" title="id a buscar">
+        <input id="p" class="w" type="number" min="1" value="8" title="id (consulta/baja)">
       </div>
       <div class="row"><span class="lbl">new Pelicula(id, nombre, puntaje)</span>
         <button class="op" onclick="arbolAlta(peli())">alta(peli) — por id</button>
+        <button class="op" onclick="arbolBaja(+document.getElementById('p').value)">baja(id)</button>
         <button class="op" onclick="arbolConsulta(+document.getElementById('p').value)">consulta(id)</button>
         <button class="op ghost" onclick="azar()">azar</button>
       </div>
