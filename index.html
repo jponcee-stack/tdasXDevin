@@ -776,8 +776,8 @@ async function colaBaja(){
   await sleep(700);
   m.items.shift(); it.el.remove(); it.el = null;
   m.ptr.primero = m.items.length ? 0 : null;
+  m.ptr.ultimo = m.items.length ? m.items.length - 1 : null;
   if (!m.items.length){
-    m.ptr.ultimo = null;
     narrate(`⚠️ quedó vacía → <span class="rulechip">ultimo = null</span> también. Si no lo reseteás, el próximo alta engancha el nuevo nodo a un fantasma. Caso borde clásico de parcial.`);
   }
   unhl(); render();
